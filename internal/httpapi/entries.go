@@ -1,7 +1,6 @@
 package httpapi
 
 import (
-    "encoding/json"
     "net/http"
 
     "github.com/tinoosan/ledger/internal/ledger"
@@ -13,21 +12,19 @@ func (s *Server) postEntry(w http.ResponseWriter, r *http.Request) {
     v := r.Context().Value(ctxKeyPostEntry)
     in, ok := v.(journal.EntryInput)
     if !ok {
-        writeError(w, http.StatusInternalServerError, "validated request missing")
+        toJSON(w, http.StatusInternalServerError, errorResponse{Error: "validated request missing"})
         return
     }
 
     saved, err := s.svc.CreateEntry(r.Context(), in)
     if err != nil {
-        writeError(w, http.StatusInternalServerError, "could not persist entry")
+        toJSON(w, http.StatusInternalServerError, errorResponse{Error: "could not persist entry"})
         return
     }
 
     // Format response
     resp := toEntryResponse(saved)
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(http.StatusCreated)
-    _ = json.NewEncoder(w).Encode(resp)
+    toJSON(w, http.StatusCreated, resp)
 }
 
 func toEntryResponse(e ledger.JournalEntry) entryResponse {

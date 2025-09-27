@@ -3,6 +3,7 @@ package journal
 import (
     "context"
     "errors"
+    "time"
 
     "github.com/google/uuid"
     "github.com/govalues/money"
@@ -36,7 +37,7 @@ func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer:
 // EntryInput carries all data necessary to create a journal entry.
 type EntryInput struct {
     UserID        uuid.UUID
-    Date          int64 // unix seconds; transport may use time.Time and convert as needed
+    Date          time.Time
     Currency      string
     Memo          string
     Category      ledger.Category
@@ -122,11 +123,10 @@ func (s *service) CreateEntry(ctx context.Context, in EntryInput) (ledger.Journa
         }
     }
 
-    // Convert unix seconds to time.Time in the API layer instead if preferred; here we set zero time.
-    // For simplicity we'll leave Date to be set by caller; handler currently passes time.Time.
     entry := ledger.JournalEntry{
         ID:            entryID,
         UserID:        in.UserID,
+        Date:          in.Date,
         Currency:      in.Currency,
         Memo:          in.Memo,
         Category:      in.Category,
@@ -161,4 +161,3 @@ func itoa(n int) string {
     if neg { i--; buf[i] = '-' }
     return string(buf[i:])
 }
-

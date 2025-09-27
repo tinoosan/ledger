@@ -21,14 +21,14 @@ func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
             dec := json.NewDecoder(r.Body)
             dec.DisallowUnknownFields()
             if err := dec.Decode(&req); err != nil {
-                writeError(w, http.StatusBadRequest, "invalid JSON: "+err.Error())
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON: "+err.Error()})
                 return
             }
 
             // Convert to service EntryInput and validate via service layer
             in := toEntryInput(req)
             if err := s.svc.ValidateEntryInput(r.Context(), in); err != nil {
-                writeError(w, http.StatusBadRequest, err.Error())
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
                 return
             }
 
@@ -56,7 +56,7 @@ func toEntryInput(req postEntryRequest) journal.EntryInput {
     }
     return journal.EntryInput{
         UserID:        req.UserID,
-        // Date intentionally omitted here; handler populates from req.Date if needed later
+        Date:          req.Date,
         Currency:      req.Currency,
         Memo:          req.Memo,
         Category:      req.Category,
