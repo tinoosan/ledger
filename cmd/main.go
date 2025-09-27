@@ -9,6 +9,8 @@ import (
     "syscall"
     "time"
 
+    "github.com/google/uuid"
+    "github.com/tinoosan/ledger/internal/ledger"
     "github.com/tinoosan/ledger/internal/httpapi"
     "github.com/tinoosan/ledger/internal/storage/memory"
 )
@@ -19,6 +21,16 @@ func main() {
 
     // In-memory repository for now
     store := memory.New()
+
+    // Quick dev seeder: one user + two USD accounts
+    user := ledger.User{ID: uuid.New()}
+    store.SeedUser(user)
+    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset}
+    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue}
+    store.SeedAccount(cash)
+    store.SeedAccount(income)
+    log.Printf("DEV seed -> user_id=%s cash_account_id=%s income_account_id=%s", user.ID, cash.ID, income.ID)
+
     srvMux := httpapi.New(store, store).Mux()
 
 	srv := &http.Server{
