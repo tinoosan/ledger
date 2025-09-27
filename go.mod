@@ -3,9 +3,10 @@ module github.com/tinoosan/ledger
 go 1.24.4
 
 require (
-	github.com/google/uuid v1.6.0
-	github.com/govalues/money v0.2.4
-	github.com/jackc/pgx/v5 v5.5.4
+    github.com/go-chi/chi/v5 v5.1.0
+    github.com/google/uuid v1.6.0
+    github.com/govalues/money v0.2.4
+    github.com/jackc/pgx/v5 v5.5.4
 )
 
 require (

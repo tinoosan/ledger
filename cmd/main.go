@@ -31,7 +31,7 @@ func main() {
     store.SeedAccount(income)
     log.Printf("DEV seed -> user_id=%s cash_account_id=%s income_account_id=%s", user.ID, cash.ID, income.ID)
 
-    srvMux := httpapi.New(store, store).Mux()
+    srvMux := httpapi.New(store, store).Handler()
 
 	srv := &http.Server{
 		Addr:              ":8080",
