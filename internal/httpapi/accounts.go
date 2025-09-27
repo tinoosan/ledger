@@ -1,3 +1,4 @@
+// Account handlers: CRUD-lite (create, list, update, deactivate).
 package httpapi
 
 import (

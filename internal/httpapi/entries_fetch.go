@@ -1,3 +1,4 @@
+// Entry fetch helper endpoints.
 package httpapi
 
 import (
@@ -32,4 +33,3 @@ func (s *Server) getEntry(w http.ResponseWriter, r *http.Request) {
     }
     toJSON(w, http.StatusOK, toEntryResponse(e))
 }
-

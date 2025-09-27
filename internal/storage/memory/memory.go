@@ -1,5 +1,7 @@
 package memory
 
+// Package memory provides a simple in-memory implementation used for development and tests.
+// It keeps code paths easy to follow while allowing us to plug in a real DB later.
 import (
     "context"
     "errors"

@@ -1,3 +1,4 @@
+// Entry handlers: creation, reversal, listing and reporting endpoints.
 package httpapi
 
 import (

@@ -1,3 +1,4 @@
+// Package httpapi contains HTTP handlers and middleware.
 package httpapi
 
 import (

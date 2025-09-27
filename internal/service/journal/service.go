@@ -23,7 +23,7 @@ type Writer interface {
     CreateJournalEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error)
 }
 
-// Service exposes validation and creation of journal entries.
+// Service exposes validation and creation of journal entries and reporting helpers.
 type Service interface {
     ValidateEntryInput(ctx context.Context, in EntryInput) error
     CreateEntry(ctx context.Context, in EntryInput) (ledger.JournalEntry, error)
@@ -149,6 +149,7 @@ func (s *service) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.J
     return s.repo.EntriesByUserID(ctx, userID)
 }
 
+// ReverseEntry flips all lines of a prior entry and posts a new balancing entry.
 func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error) {
     if userID == uuid.Nil || entryID == uuid.Nil {
         return ledger.JournalEntry{}, errors.New("user_id and entry_id are required")
@@ -182,6 +183,7 @@ func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, d
 }
 
 // TrialBalance returns net amounts per account (debits - credits) up to asOf (inclusive).
+// TrialBalance returns net amounts (debits - credits) per account up to asOf.
 func (s *service) TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error) {
     if userID == uuid.Nil {
         return nil, errors.New("user_id is required")
@@ -210,6 +212,7 @@ func (s *service) TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time
     return out, nil
 }
 
+// AccountBalance returns net amount for a single account up to asOf.
 func (s *service) AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error) {
     if userID == uuid.Nil || accountID == uuid.Nil { return money.MustNewAmount("USD", 0, 0), errors.New("user_id and account_id are required") }
     entries, err := s.repo.EntriesByUserID(ctx, userID)

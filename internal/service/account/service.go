@@ -1,3 +1,5 @@
+// Package account implements the account service rules: immutable identity fields,
+// editable descriptive fields, soft-deletes, and per-user unique Path.
 package account
 
 import (
@@ -118,7 +120,7 @@ type UpdateInput struct {
     Metadata map[string]string // merged into existing keys
 }
 
-// Update applies allowed changes and records audit entries.
+// Update applies allowed changes to name/method/vendor/metadata.
 func (s *service) Update(ctx context.Context, userID, accountID uuid.UUID, in UpdateInput) (ledger.Account, error) {
     if userID == uuid.Nil || accountID == uuid.Nil {
         return ledger.Account{}, errors.New("user_id and account_id are required")
@@ -179,7 +181,7 @@ func (s *service) Update(ctx context.Context, userID, accountID uuid.UUID, in Up
     return updated, nil
 }
 
-// Deactivate sets metadata["active"]="false" and audits it. No-op if system=true.
+// Deactivate sets metadata["active"]="false". No-op if system=true.
 func (s *service) Deactivate(ctx context.Context, userID, accountID uuid.UUID) error {
     if userID == uuid.Nil || accountID == uuid.Nil {
         return errors.New("user_id and account_id are required")

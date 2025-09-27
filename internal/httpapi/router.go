@@ -1,3 +1,5 @@
+// Package httpapi wires the HTTP surface of the ledger service.
+// It keeps handlers thin, delegating business rules to the service layer.
 package httpapi
 
 import (
@@ -11,6 +13,7 @@ import (
 )
 
 // Server wires handlers and middleware using Chi.
+// It composes read (repo) and write (writer) dependencies through services.
 type Server struct {
     svc    journal.Service
     accountSvc account.Service
@@ -20,6 +23,7 @@ type Server struct {
 }
 
 // New constructs the HTTP server with routes and middleware.
+// The logger is used by basic request/response logging and panic recovery.
 func New(repo Repository, writer Writer, logger *slog.Logger) *Server {
     r := chi.NewRouter()
     r.Use(chimw.RequestID)
@@ -37,6 +41,7 @@ func (s *Server) Handler() http.Handler { return s.rt }
 // Mux is kept for compatibility with existing main wiring.
 func (s *Server) Mux() http.Handler { return s.rt }
 
+// routes declares the public HTTP API endpoints and attaches any per-route middleware.
 func (s *Server) routes() {
     // Entries
     s.rt.With(s.validatePostEntry()).Post("/entries", s.postEntry)
