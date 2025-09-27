@@ -1,0 +1,22 @@
+root = "."
+tmp_dir = "tmp"
+
+[build]
+# Build the app into tmp/ and run the built binary.
+cmd = "go build -o ./tmp/ledger ./cmd"
+bin = "tmp/ledger"
+full_bin = "./tmp/ledger"
+include_ext = ["go", "mod", "sum"]
+exclude_dir = ["tmp", "vendor", ".git", "node_modules"]
+exclude_regex = ["_test.go$"]
+delay = 500
+stop_on_error = true
+
+[log]
+time = true
+
+# Optional env for local dev; override via your shell as needed
+[env]
+# LOG_FORMAT = "text"   # json|text (default json if unset)
+# LOG_LEVEL = "DEBUG"   # DEBUG|INFO|WARNING|ERROR
+
