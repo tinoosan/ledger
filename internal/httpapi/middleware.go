@@ -6,11 +6,13 @@ import (
     "net/http"
 
     "github.com/tinoosan/ledger/internal/service/journal"
+    "github.com/google/uuid"
 )
 
 type ctxKey string
 
 const ctxKeyPostEntry ctxKey = "validatedPostEntry"
+const ctxKeyListEntries ctxKey = "validatedListEntries"
 
 // validatePostEntry ensures the POST /entries request adheres to business invariants
 // and stores the validated request struct in the request context for the handler to use.
@@ -33,6 +35,27 @@ func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
             }
 
             ctx := context.WithValue(r.Context(), ctxKeyPostEntry, in)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+
+// validateListEntries parses and validates query params for GET /entries.
+func (s *Server) validateListEntries() func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            q := r.URL.Query()
+            raw := q.Get("user_id")
+            if raw == "" {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
+                return
+            }
+            uid, err := uuid.Parse(raw)
+            if err != nil {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
+                return
+            }
+            ctx := context.WithValue(r.Context(), ctxKeyListEntries, listEntriesQuery{UserID: uid})
             next.ServeHTTP(w, r.WithContext(ctx))
         })
     }

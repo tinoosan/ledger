@@ -58,3 +58,15 @@ func (s *Store) CreateJournalEntry(_ context.Context, entry ledger.JournalEntry)
     return e, nil
 }
 
+// EntriesByUserID returns all entries for a user.
+func (s *Store) EntriesByUserID(_ context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    out := make([]ledger.JournalEntry, 0)
+    for _, e := range s.entries {
+        if e.UserID == userID {
+            out = append(out, *e)
+        }
+    }
+    return out, nil
+}

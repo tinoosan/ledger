@@ -14,6 +14,7 @@ import (
 // Repo defines read operations needed by the service.
 type Repo interface {
     AccountsByIDs(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]ledger.Account, error)
+    EntriesByUserID(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
 }
 
 // Writer defines write operations needed by the service.
@@ -25,6 +26,7 @@ type Writer interface {
 type Service interface {
     ValidateEntryInput(ctx context.Context, in EntryInput) error
     CreateEntry(ctx context.Context, in EntryInput) (ledger.JournalEntry, error)
+    ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
 }
 
 type service struct {
@@ -134,6 +136,13 @@ func (s *service) CreateEntry(ctx context.Context, in EntryInput) (ledger.Journa
         Lines:         lines,
     }
     return s.writer.CreateJournalEntry(ctx, entry)
+}
+
+func (s *service) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error) {
+    if userID == uuid.Nil {
+        return nil, errors.New("user_id is required")
+    }
+    return s.repo.EntriesByUserID(ctx, userID)
 }
 
 func fieldErr(i int, msg string) error { return errors.New("line[" + itoa(i) + "]: " + msg) }

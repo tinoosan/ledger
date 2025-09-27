@@ -35,6 +35,7 @@ func (s *Server) Handler() http.Handler { return s.rt }
 func (s *Server) Mux() http.Handler { return s.rt }
 
 func (s *Server) routes() {
-    // POST /entries with validation middleware
+    // Entries
     s.rt.With(s.validatePostEntry()).Post("/entries", s.postEntry)
+    s.rt.With(s.validateListEntries()).Get("/entries", s.listEntries)
 }

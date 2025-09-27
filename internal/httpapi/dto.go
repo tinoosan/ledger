@@ -45,3 +45,7 @@ type lineResponse struct {
     AmountMinor int64       `json:"amount_minor"`
 }
 
+// listEntriesQuery holds validated query params for GET /entries.
+type listEntriesQuery struct {
+    UserID uuid.UUID
+}
