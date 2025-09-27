@@ -3,6 +3,7 @@ package account
 import (
     "context"
     "errors"
+    "strings"
 
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
@@ -67,6 +68,17 @@ func (s *service) Create(ctx context.Context, in CreateInput) (ledger.Account, e
     if err := s.ValidateCreateInput(in); err != nil {
         return ledger.Account{}, err
     }
+    // Ensure unique path per user (case-insensitive on method/vendor)
+    existing, err := s.repo.AccountsByUserID(ctx, in.UserID)
+    if err != nil {
+        return ledger.Account{}, err
+    }
+    desired := pathKey(in.Type, in.Method, in.Vendor)
+    for _, a := range existing {
+        if a.UserID == in.UserID && pathKey(a.Type, a.Method, a.Vendor) == desired {
+            return ledger.Account{}, errors.New("account path already exists for user")
+        }
+    }
     acc := ledger.Account{
         ID:       uuid.New(),
         UserID:   in.UserID,
@@ -84,4 +96,9 @@ func (s *service) List(ctx context.Context, userID uuid.UUID) ([]ledger.Account,
         return nil, errors.New("user_id is required")
     }
     return s.repo.AccountsByUserID(ctx, userID)
+}
+
+// pathKey returns a normalized path Type:method:vendor for uniqueness checks.
+func pathKey(t ledger.AccountType, method, vendor string) string {
+    return string(t) + ":" + strings.ToLower(method) + ":" + strings.ToLower(vendor)
 }

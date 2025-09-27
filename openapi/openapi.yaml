@@ -299,5 +299,5 @@ components:
               $ref: '#/components/schemas/UUID'
             path:
               type: string
-              description: Derived identifier in the form Type:Method:Vendor (lowercase type)
+              description: Derived identifier in the form type:method:vendor (all lowercase)
               example: assets:bank:monzo
