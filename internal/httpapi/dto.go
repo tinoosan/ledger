@@ -74,4 +74,6 @@ type accountResponse struct {
 
 type listAccountsQuery struct {
     UserID uuid.UUID
+    Method string
+    Vendor string
 }

@@ -4,6 +4,8 @@ import (
     "net/http"
 
     "github.com/tinoosan/ledger/internal/service/account"
+    "errors"
+    "strings"
 )
 
 func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
@@ -15,6 +17,10 @@ func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
     }
     acc, err := s.accountSvc.Create(r.Context(), in)
     if err != nil {
+        if errors.Is(err, account.ErrPathExists) {
+            toJSON(w, http.StatusConflict, errorResponse{Error: err.Error()})
+            return
+        }
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "could not create account"})
         return
     }
@@ -36,7 +42,23 @@ func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
     }
     out := make([]accountResponse, 0, len(accs))
     for _, a := range accs {
+        if q.Method != "" && !equalsFold(a.Method, q.Method) { continue }
+        if q.Vendor != "" && !equalsFold(a.Vendor, q.Vendor) { continue }
         out = append(out, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Method: a.Method, Vendor: a.Vendor, Path: a.Path()})
     }
     toJSON(w, http.StatusOK, out)
+}
+
+func equalsFold(a, b string) bool {
+    if len(a) != len(b) { // quick path; ToLower alloc only if needed
+        return strings.EqualFold(a, b)
+    }
+    for i := 0; i < len(a); i++ {
+        ca, cb := a[i], b[i]
+        if ca == cb { continue }
+        if 'A' <= ca && ca <= 'Z' { ca += 'a' - 'A' }
+        if 'A' <= cb && cb <= 'Z' { cb += 'a' - 'A' }
+        if ca != cb { return false }
+    }
+    return true
 }

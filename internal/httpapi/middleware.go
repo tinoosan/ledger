@@ -100,7 +100,10 @@ func (s *Server) validateListAccounts() func(http.Handler) http.Handler {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
                 return
             }
-            ctx := context.WithValue(r.Context(), ctxKeyListAccounts, listAccountsQuery{UserID: uid})
+            q := listAccountsQuery{UserID: uid}
+            if m := r.URL.Query().Get("method"); m != "" { q.Method = m }
+            if v := r.URL.Query().Get("vendor"); v != "" { q.Vendor = v }
+            ctx := context.WithValue(r.Context(), ctxKeyListAccounts, q)
             next.ServeHTTP(w, r.WithContext(ctx))
         })
     }

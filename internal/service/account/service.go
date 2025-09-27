@@ -76,7 +76,7 @@ func (s *service) Create(ctx context.Context, in CreateInput) (ledger.Account, e
     desired := pathKey(in.Type, in.Method, in.Vendor)
     for _, a := range existing {
         if a.UserID == in.UserID && pathKey(a.Type, a.Method, a.Vendor) == desired {
-            return ledger.Account{}, errors.New("account path already exists for user")
+            return ledger.Account{}, ErrPathExists
         }
     }
     acc := ledger.Account{
@@ -102,3 +102,6 @@ func (s *service) List(ctx context.Context, userID uuid.UUID) ([]ledger.Account,
 func pathKey(t ledger.AccountType, method, vendor string) string {
     return string(t) + ":" + strings.ToLower(method) + ":" + strings.ToLower(vendor)
 }
+
+// ErrPathExists indicates an account with the same normalized path already exists for the user.
+var ErrPathExists = errors.New("account path already exists for user")

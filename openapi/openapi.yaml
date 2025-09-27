@@ -22,6 +22,18 @@ paths:
           description: ID of the user whose accounts to fetch
           schema:
             $ref: '#/components/schemas/UUID'
+        - in: query
+          name: method
+          required: false
+          description: Filter accounts by method (case-insensitive)
+          schema:
+            type: string
+        - in: query
+          name: vendor
+          required: false
+          description: Filter accounts by vendor (case-insensitive)
+          schema:
+            type: string
       responses:
         '200':
           description: OK
