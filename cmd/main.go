@@ -5,6 +5,7 @@ import (
     "net/http"
     "os"
     "os/signal"
+    "strings"
     "syscall"
     "time"
     "log/slog"
@@ -18,9 +19,8 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-    // Logger (slog to stdout). Level via LOG_LEVEL = DEBUG|INFO|WARNING|ERROR
-    level := parseLogLevel(os.Getenv("LOG_LEVEL"))
-    logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+    // Logger (slog to stdout). Level via LOG_LEVEL; format via LOG_FORMAT (json|text, default json)
+    logger := buildLoggerFromEnv()
     slog.SetDefault(logger)
 
     // In-memory repository for now
@@ -78,4 +78,14 @@ func parseLogLevel(s string) slog.Leveler {
     default:
         return slog.LevelInfo
     }
+}
+
+func buildLoggerFromEnv() *slog.Logger {
+    level := parseLogLevel(os.Getenv("LOG_LEVEL"))
+    format := strings.ToLower(strings.TrimSpace(os.Getenv("LOG_FORMAT")))
+    if format == "text" {
+        return slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+    }
+    // default to JSON
+    return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 }
