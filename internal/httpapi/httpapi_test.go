@@ -151,6 +151,79 @@ func TestEntries_ReverseAndList(t *testing.T) {
     if rec3.Code != http.StatusOK { t.Fatalf("list entries expected 200, got %d", rec3.Code) }
 }
 
+func TestEntries_GetAndIdempotency(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+    body := map[string]any{
+        "user_id":  userID.String(),
+        "date":     time.Now().UTC().Format(time.RFC3339),
+        "currency": "USD",
+        "memo":     "Test",
+        "category": "general",
+        "client_entry_id": "abc-123",
+        "lines": []map[string]any{
+            {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 700},
+            {"account_id": income.ID.String(), "side": "credit", "amount_minor": 700},
+        },
+    }
+    b, _ := json.Marshal(body)
+    req := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder(); h.ServeHTTP(rec, req)
+    if rec.Code != http.StatusCreated { t.Fatalf("create entry expected 201, got %d", rec.Code) }
+    var er entryResp; _ = json.Unmarshal(rec.Body.Bytes(), &er)
+
+    // GET /entries/{id}
+    r := httptest.NewRequest(http.MethodGet, "/entries/"+er.ID+"?user_id="+userID.String(), nil)
+    rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
+    if rr.Code != http.StatusOK { t.Fatalf("get entry expected 200, got %d", rr.Code) }
+
+    // GET /idempotency/entries/{client_entry_id}
+    r2 := httptest.NewRequest(http.MethodGet, "/idempotency/entries/abc-123?user_id="+userID.String(), nil)
+    rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r2)
+    if rr2.Code != http.StatusOK { t.Fatalf("idempotency expected 200, got %d: %s", rr2.Code, rr2.Body.String()) }
+    var er2 entryResp; _ = json.Unmarshal(rr2.Body.Bytes(), &er2)
+    if er2.ID != er.ID { t.Fatalf("id mismatch: %s vs %s", er2.ID, er.ID) }
+}
+
+func TestAccount_BalanceAndLedger(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+    // Make two entries: +1000 and +500 to cash
+    mk := func(amt int64) {
+        body := map[string]any{
+            "user_id": userID.String(),
+            "date": time.Now().UTC().Format(time.RFC3339),
+            "currency": "USD",
+            "category": "transfers",
+            "lines": []map[string]any{
+                {"account_id": cash.ID.String(), "side": "debit", "amount_minor": amt},
+                {"account_id": income.ID.String(), "side": "credit", "amount_minor": amt},
+            },
+        }
+        b, _ := json.Marshal(body)
+        r := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+        r.Header.Set("Content-Type", "application/json")
+        rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
+        if rr.Code != http.StatusCreated { t.Fatalf("create failed: %d", rr.Code) }
+    }
+    mk(1000); mk(500)
+
+    // Balance should be 1500
+    rb := httptest.NewRequest(http.MethodGet, "/accounts/"+cash.ID.String()+"/balance?user_id="+userID.String(), nil)
+    rbr := httptest.NewRecorder(); h.ServeHTTP(rbr, rb)
+    if rbr.Code != http.StatusOK { t.Fatalf("balance expected 200, got %d", rbr.Code) }
+    var br struct{ BalanceMinor int64 `json:"balance_minor"` }
+    _ = json.Unmarshal(rbr.Body.Bytes(), &br)
+    if br.BalanceMinor != 1500 { t.Fatalf("unexpected balance: %d", br.BalanceMinor) }
+
+    // Ledger with limit=1 should return next_cursor
+    rl := httptest.NewRequest(http.MethodGet, "/accounts/"+cash.ID.String()+"/ledger?user_id="+userID.String()+"&limit=1", nil)
+    rlr := httptest.NewRecorder(); h.ServeHTTP(rlr, rl)
+    if rlr.Code != http.StatusOK { t.Fatalf("ledger expected 200, got %d", rlr.Code) }
+    var l1 struct{ Items []map[string]any `json:"items"`; NextCursor *string `json:"next_cursor"` }
+    _ = json.Unmarshal(rlr.Body.Bytes(), &l1)
+    if len(l1.Items) != 1 || l1.NextCursor == nil { t.Fatalf("expected 1 item and next_cursor; got: %+v", l1) }
+}
+
 func TestAccounts_InvalidAndSystemGuards(t *testing.T) {
     store, h, userID, _, _ := setup(t)
 

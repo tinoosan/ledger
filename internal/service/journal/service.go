@@ -30,6 +30,7 @@ type Service interface {
     ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
     ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error)
     TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error)
+    AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error)
 }
 
 type service struct {
@@ -207,6 +208,34 @@ func (s *service) TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time
         }
     }
     return out, nil
+}
+
+func (s *service) AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error) {
+    if userID == uuid.Nil || accountID == uuid.Nil { return money.MustNewAmount("USD", 0, 0), errors.New("user_id and account_id are required") }
+    entries, err := s.repo.EntriesByUserID(ctx, userID)
+    if err != nil { return money.MustNewAmount("USD", 0, 0), err }
+    // Determine currency from first matching line or default to USD
+    var curr string
+    for _, e := range entries {
+        if asOf != nil && e.Date.After(*asOf) { continue }
+        for _, ln := range e.Lines.ByID { if ln.AccountID == accountID { curr = ln.Amount.Curr().Code(); break } }
+        if curr != "" { break }
+    }
+    if curr == "" { curr = "USD" }
+    net, _ := money.NewAmountFromMinorUnits(curr, 0)
+    for _, e := range entries {
+        if asOf != nil && e.Date.After(*asOf) { continue }
+        for _, ln := range e.Lines.ByID {
+            if ln.AccountID != accountID { continue }
+            switch ln.Side {
+            case ledger.SideDebit:
+                if v, err := net.Add(ln.Amount); err == nil { net = v }
+            case ledger.SideCredit:
+                if v, err := net.Sub(ln.Amount); err == nil { net = v }
+            }
+        }
+    }
+    return net, nil
 }
 
 func fieldErr(i int, msg string) error { return errors.New("line[" + itoa(i) + "]: " + msg) }

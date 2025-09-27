@@ -41,11 +41,19 @@ func (s *Server) routes() {
     // Entries
     s.rt.With(s.validatePostEntry()).Post("/entries", s.postEntry)
     s.rt.With(s.validateListEntries()).Get("/entries", s.listEntries)
+    s.rt.Get("/entries/{id}", s.getEntry)
     s.rt.With(s.validateReverseEntry()).Post("/entries/reverse", s.reverseEntry)
     s.rt.With(s.validateTrialBalance()).Get("/trial-balance", s.trialBalance)
     // Accounts
     s.rt.With(s.validatePostAccount()).Post("/accounts", s.postAccount)
     s.rt.With(s.validateListAccounts()).Get("/accounts", s.listAccounts)
+    s.rt.Get("/accounts/{id}/balance", s.getAccountBalance)
+    s.rt.Get("/accounts/{id}/ledger", s.getAccountLedger)
     s.rt.Patch("/accounts/{id}", s.updateAccount)
     s.rt.Delete("/accounts/{id}", s.deactivateAccount)
+    // Idempotency
+    s.rt.Get("/idempotency/entries/{client_entry_id}", s.getEntryByClientID)
+    // Health
+    s.rt.Get("/healthz", s.healthz)
+    s.rt.Get("/readyz", s.readyz)
 }
