@@ -28,7 +28,7 @@ func (s *Server) getEntry(w http.ResponseWriter, r *http.Request) {
     }
     e, err := s.repo.EntryByID(r.Context(), userID, id)
     if err != nil {
-        toJSON(w, http.StatusNotFound, errorResponse{Error: "entry not found"})
+        toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"})
         return
     }
     toJSON(w, http.StatusOK, toEntryResponse(e))

@@ -6,6 +6,7 @@ import (
     "encoding/json"
     "net/http"
     "time"
+    "strings"
 
     "github.com/tinoosan/ledger/internal/service/journal"
     "github.com/google/uuid"
@@ -37,7 +38,20 @@ func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
             // Convert to service EntryInput and validate via service layer
             in := toEntryInput(req)
             if err := s.svc.ValidateEntryInput(r.Context(), in); err != nil {
-                toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+                // Map known validation messages to 422 with codes
+                code := "validation_error"
+                msg := err.Error()
+                switch {
+                case msg == "at least 2 lines":
+                    code = "too_few_lines"
+                case strings.Contains(msg, "amount must be > 0"):
+                    code = "invalid_amount"
+                case strings.Contains(msg, "currency mismatch"):
+                    code = "mixed_currency"
+                case msg == "sum(debits) must equal sum(credits)":
+                    code = "unbalanced_entry"
+                }
+                toJSON(w, http.StatusUnprocessableEntity, errorResponse{Error: msg, Code: code})
                 return
             }
 

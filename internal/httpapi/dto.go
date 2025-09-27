@@ -25,6 +25,7 @@ type postEntryLine struct {
 
 type errorResponse struct {
     Error string `json:"error"`
+    Code  string `json:"code,omitempty"`
 }
 
 type entryResponse struct {
@@ -48,6 +49,12 @@ type lineResponse struct {
 // listEntriesQuery holds validated query params for GET /entries.
 type listEntriesQuery struct {
     UserID uuid.UUID
+}
+
+// listEntriesResponse wraps entries with cursor for pagination.
+type listEntriesResponse struct {
+    Items      []entryResponse `json:"items"`
+    NextCursor *string         `json:"next_cursor,omitempty"`
 }
 
 // Reverse entry
@@ -100,6 +107,7 @@ type accountResponse struct {
     Method   string              `json:"method"`
     Vendor   string              `json:"vendor"`
     Path     string              `json:"path"`
+    Metadata map[string]string   `json:"metadata,omitempty"`
 }
 
 type listAccountsQuery struct {

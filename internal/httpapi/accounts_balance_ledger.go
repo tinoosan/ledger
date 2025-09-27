@@ -27,6 +27,11 @@ func (s *Server) getAccountBalance(w http.ResponseWriter, r *http.Request) {
         t, err := time.Parse(time.RFC3339, v); if err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid as_of"}); return }
         tt := t.UTC(); asOf = &tt
     }
+    // ensure account exists and owned by user
+    if _, err := s.repo.AccountByID(r.Context(), userID, id); err != nil {
+        toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"})
+        return
+    }
     bal, err := s.svc.AccountBalance(r.Context(), userID, id, asOf)
     if err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()}); return }
     units, _ := bal.MinorUnits()
@@ -42,6 +47,11 @@ func (s *Server) getAccountLedger(w http.ResponseWriter, r *http.Request) {
     if err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid account id"}); return }
     userID, err := uuid.Parse(r.URL.Query().Get("user_id"))
     if err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"}); return }
+    // ensure account exists and owned by user
+    if _, err := s.repo.AccountByID(r.Context(), userID, id); err != nil {
+        toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"})
+        return
+    }
     var from, to *time.Time
     if v := r.URL.Query().Get("from"); v != "" { if t, err := time.Parse(time.RFC3339, v); err == nil { tt := t.UTC(); from = &tt } else { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid from"}); return } }
     if v := r.URL.Query().Get("to"); v != "" { if t, err := time.Parse(time.RFC3339, v); err == nil { tt := t.UTC(); to = &tt } else { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid to"}); return } }

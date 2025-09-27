@@ -60,7 +60,7 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
         toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
         return
     }
-    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path()}
+    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata}
     toJSON(w, http.StatusOK, resp)
 }
 

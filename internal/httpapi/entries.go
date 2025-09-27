@@ -2,7 +2,11 @@
 package httpapi
 
 import (
+    "encoding/base64"
     "net/http"
+    "sort"
+    "strconv"
+    "strings"
     "time"
 
     "github.com/google/uuid"
@@ -106,12 +110,59 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "could not fetch entries"})
         return
     }
-    // Map entries to response
-    out := make([]entryResponse, 0, len(entries))
-    for _, e := range entries {
-        out = append(out, toEntryResponse(e))
+    // ensure deterministic order: Date asc, ID asc
+    sort.Slice(entries, func(i, j int) bool {
+        if entries[i].Date.Equal(entries[j].Date) {
+            return entries[i].ID.String() < entries[j].ID.String()
+        }
+        return entries[i].Date.Before(entries[j].Date)
+    })
+    // parse optional params
+    var from, to *time.Time
+    if raw := r.URL.Query().Get("from"); raw != "" {
+        if t, err := time.Parse(time.RFC3339, raw); err == nil { tt := t.UTC(); from = &tt } else { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid from"}); return }
     }
-    toJSON(w, http.StatusOK, out)
+    if raw := r.URL.Query().Get("to"); raw != "" {
+        if t, err := time.Parse(time.RFC3339, raw); err == nil { tt := t.UTC(); to = &tt } else { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid to"}); return }
+    }
+    lim := 50
+    if raw := r.URL.Query().Get("limit"); raw != "" {
+        if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 200 { lim = n }
+    }
+    cursor := r.URL.Query().Get("cursor")
+    // build window by time
+    win := make([]ledger.JournalEntry, 0, len(entries))
+    for _, e := range entries {
+        if from != nil && e.Date.Before(*from) { continue }
+        if to != nil && e.Date.After(*to) { continue }
+        win = append(win, e)
+    }
+    // start index from cursor
+    start := 0
+    if cursor != "" {
+        if b, err := base64.StdEncoding.DecodeString(cursor); err == nil {
+            parts := strings.Split(string(b), "|")
+            if len(parts) == 2 {
+                if ts, err := time.Parse(time.RFC3339Nano, parts[0]); err == nil {
+                    cid, _ := uuid.Parse(parts[1])
+                    for i := range win {
+                        if win[i].Date.After(ts) { break }
+                        if win[i].Date.Equal(ts) && win[i].ID == cid { start = i + 1; break }
+                    }
+                }
+            }
+        }
+    }
+    end := start + lim
+    if end > len(win) { end = len(win) }
+    page := win[start:end]
+    resp := listEntriesResponse{Items: make([]entryResponse, 0, len(page))}
+    for _, e := range page { resp.Items = append(resp.Items, toEntryResponse(e)) }
+    if end < len(win) {
+        c := base64.StdEncoding.EncodeToString([]byte(page[len(page)-1].Date.Format(time.RFC3339Nano) + "|" + page[len(page)-1].ID.String()))
+        resp.NextCursor = &c
+    }
+    toJSON(w, http.StatusOK, resp)
 }
 
 func toEntryResponse(e ledger.JournalEntry) entryResponse {

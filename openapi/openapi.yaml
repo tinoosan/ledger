@@ -32,14 +32,34 @@ paths:
           name: user_id
           required: true
           schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: from
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: cursor
+          required: false
+          schema: { type: string }
       responses:
         '200':
           description: OK
           content:
             application/json:
               schema:
-                type: array
-                items: { $ref: '#/components/schemas/JournalEntryResponse' }
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: '#/components/schemas/JournalEntryResponse' }
+                  next_cursor: { type: string }
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
     post:
@@ -54,6 +74,7 @@ paths:
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '422': { description: Unprocessable (validation), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
   /entries/{id}:
@@ -73,7 +94,7 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
-        '404': { description: Not found }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
   /entries/reverse:
     post:
@@ -97,6 +118,34 @@ paths:
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+  
+  /entries/reclassify:
+    post:
+      summary: Reclassify a journal entry (reverse + correct)
+      operationId: reclassifyEntry
+      tags: [entries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, entry_id, lines]
+              properties:
+                user_id: { $ref: '#/components/schemas/UUID' }
+                entry_id: { $ref: '#/components/schemas/UUID' }
+                date: { type: string, format: date-time }
+                memo: { type: string }
+                category: { $ref: '#/components/schemas/Category' }
+                lines:
+                  type: array
+                  minItems: 2
+                  items: { $ref: '#/components/schemas/JournalLineRequest' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '422': { description: Unprocessable (validation), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
   /idempotency/entries/{client_entry_id}:
     get:
@@ -178,6 +227,23 @@ paths:
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
   /accounts/{id}:
+    get:
+      summary: Get an account
+      operationId: getAccount
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
     patch:
       summary: Update an account (mutable fields only)
       operationId: updateAccount
@@ -240,6 +306,7 @@ paths:
       responses:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AccountBalanceResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
   /accounts/{id}/ledger:
     get:
@@ -277,6 +344,7 @@ paths:
           content:
             application/json:
               schema: { $ref: '#/components/schemas/AccountLedgerResponse' }
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
 components:
   schemas:
@@ -357,8 +425,12 @@ components:
         name: { type: string }
         currency: { type: string, description: ISO 4217 currency code }
         type: { $ref: '#/components/schemas/AccountType' }
-        method: { type: string, description: Instrument or sub-type (e.g., Bank, CreditCard, Cash) }
-        vendor: { type: string, description: Institution/identifier (e.g., Monzo, Amex, PayPal) }
+        method:
+          type: string
+          description: "Instrument or sub-type, e.g. Bank | CreditCard | Cash"
+        vendor:
+          type: string
+          description: "Institution/identifier, e.g. Monzo | Amex | PayPal"
     AccountUpdateRequest:
       type: object
       properties:
@@ -379,6 +451,10 @@ components:
               type: string
               description: Derived identifier type:method:vendor (lowercase)
               example: assets:bank:monzo
+            metadata:
+              type: object
+              additionalProperties:
+                type: string
 
     AccountBalanceResponse:
       type: object
@@ -433,4 +509,4 @@ components:
       required: [error]
       properties:
         error: { type: string }
-
+        code: { type: string }

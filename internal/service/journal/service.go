@@ -29,6 +29,7 @@ type Service interface {
     CreateEntry(ctx context.Context, in EntryInput) (ledger.JournalEntry, error)
     ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
     ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error)
+    Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []LineInput) (ledger.JournalEntry, error)
     TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error)
     AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error)
 }
@@ -180,6 +181,26 @@ func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, d
         Lines:    lines,
     }
     return s.writer.CreateJournalEntry(ctx, e)
+}
+
+// Reclassify posts a reversing entry for the original, then a correcting entry with provided lines.
+// Returns the correcting entry.
+func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []LineInput) (ledger.JournalEntry, error) {
+    if userID == uuid.Nil || entryID == uuid.Nil {
+        return ledger.JournalEntry{}, errors.New("user_id and entry_id are required")
+    }
+    orig, err := s.repo.EntryByID(ctx, userID, entryID)
+    if err != nil { return ledger.JournalEntry{}, err }
+    if orig.UserID != userID { return ledger.JournalEntry{}, errors.New("entry does not belong to user") }
+
+    // 1) reversing entry
+    if _, err := s.ReverseEntry(ctx, userID, entryID, date); err != nil { return ledger.JournalEntry{}, err }
+
+    // 2) correcting entry
+    if memo == "" { memo = "reclassify of " + orig.ID.String() }
+    in := EntryInput{UserID: userID, Date: date, Currency: orig.Currency, Memo: memo, Category: category, Lines: newLines}
+    if err := s.ValidateEntryInput(ctx, in); err != nil { return ledger.JournalEntry{}, err }
+    return s.CreateEntry(ctx, in)
 }
 
 // TrialBalance returns net amounts per account (debits - credits) up to asOf (inclusive).
