@@ -29,8 +29,8 @@ func main() {
     // Quick dev seeder: one user + two USD accounts
     user := ledger.User{ID: uuid.New()}
     store.SeedUser(user)
-    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset}
-    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue}
+    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset, Method: "Cash", Vendor: "Wallet"}
+    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue, Method: "Salary", Vendor: "Employer"}
     store.SeedAccount(cash)
     store.SeedAccount(income)
     logger.Info("DEV seed", "user_id", user.ID.String(), "cash_account_id", cash.ID.String(), "income_account_id", income.ID.String())

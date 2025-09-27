@@ -112,6 +112,8 @@ func toAccountCreateInput(req postAccountRequest) account.CreateInput {
         Name:     req.Name,
         Currency: req.Currency,
         Type:     req.Type,
+        Method:   req.Method,
+        Vendor:   req.Vendor,
     }
 }
 

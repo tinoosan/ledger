@@ -18,7 +18,7 @@ func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "could not create account"})
         return
     }
-    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type}
+    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path()}
     toJSON(w, http.StatusCreated, resp)
 }
 
@@ -36,7 +36,7 @@ func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
     }
     out := make([]accountResponse, 0, len(accs))
     for _, a := range accs {
-        out = append(out, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type})
+        out = append(out, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Method: a.Method, Vendor: a.Vendor, Path: a.Path()})
     }
     toJSON(w, http.StatusOK, out)
 }

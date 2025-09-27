@@ -57,6 +57,8 @@ type postAccountRequest struct {
     Name     string              `json:"name"`
     Currency string              `json:"currency"`
     Type     ledger.AccountType  `json:"type"`
+    Method   string              `json:"method"`
+    Vendor   string              `json:"vendor"`
 }
 
 type accountResponse struct {
@@ -65,6 +67,9 @@ type accountResponse struct {
     Name     string              `json:"name"`
     Currency string              `json:"currency"`
     Type     ledger.AccountType  `json:"type"`
+    Method   string              `json:"method"`
+    Vendor   string              `json:"vendor"`
+    Path     string              `json:"path"`
 }
 
 type listAccountsQuery struct {

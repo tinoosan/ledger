@@ -34,6 +34,8 @@ type CreateInput struct {
     Name     string
     Currency string
     Type     ledger.AccountType
+    Method   string
+    Vendor   string
 }
 
 func (s *service) ValidateCreateInput(in CreateInput) error {
@@ -45,6 +47,12 @@ func (s *service) ValidateCreateInput(in CreateInput) error {
     }
     if in.Currency == "" {
         return errors.New("currency is required")
+    }
+    if in.Method == "" {
+        return errors.New("method is required")
+    }
+    if in.Vendor == "" {
+        return errors.New("vendor is required")
     }
     switch in.Type {
     case ledger.AccountTypeAsset, ledger.AccountTypeLiability, ledger.AccountTypeEquity, ledger.AccountTypeRevenue, ledger.AccountTypeExpense:
@@ -65,6 +73,8 @@ func (s *service) Create(ctx context.Context, in CreateInput) (ledger.Account, e
         Name:     in.Name,
         Currency: in.Currency,
         Type:     in.Type,
+        Method:   in.Method,
+        Vendor:   in.Vendor,
     }
     return s.writer.CreateAccount(ctx, acc)
 }
@@ -75,4 +85,3 @@ func (s *service) List(ctx context.Context, userID uuid.UUID) ([]ledger.Account,
     }
     return s.repo.AccountsByUserID(ctx, userID)
 }
-

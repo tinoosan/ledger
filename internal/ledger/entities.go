@@ -65,11 +65,21 @@ type User struct {
 
 // Account represents a ledger account belonging to a user.
 type Account struct {
-	ID       uuid.UUID
-	UserID   uuid.UUID
-	Name     string
-	Currency string
-	Type     AccountType
+    ID       uuid.UUID
+    UserID   uuid.UUID
+    Name     string
+    Currency string
+    Type     AccountType
+    // Method describes the instrument or sub-type (e.g., Bank, CreditCard, Cash, Savings, Loan, Rent, Salary).
+    Method   string
+    // Vendor identifies the specific institution or instance (e.g., Monzo, Amex, PayPal, LandlordLtd, EmployerX).
+    Vendor   string
+}
+
+// Path returns a colon-separated identifier for the account: Type:Method:Vendor.
+// Example: assets:bank:monzo
+func (a Account) Path() string {
+    return string(a.Type) + ":" + a.Method + ":" + a.Vendor
 }
 
 // JournalEntry captures metadata for a collection of journal lines.

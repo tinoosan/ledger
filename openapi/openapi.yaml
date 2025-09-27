@@ -270,7 +270,7 @@ components:
       enum: [asset, liability, equity, revenue, expense]
     AccountRequest:
       type: object
-      required: [user_id, name, currency, type]
+      required: [user_id, name, currency, type, method, vendor]
       properties:
         user_id:
           $ref: '#/components/schemas/UUID'
@@ -281,6 +281,14 @@ components:
           description: ISO 4217 currency code
         type:
           $ref: '#/components/schemas/AccountType'
+        method:
+          type: string
+          description: Instrument or sub-type (e.g., Bank, CreditCard, Cash, Savings, Loan, Rent, Salary)
+          example: Bank
+        vendor:
+          type: string
+          description: Specific institution or identifier (e.g., Monzo, Amex, PayPal, LandlordLtd, EmployerX)
+          example: Monzo
     AccountResponse:
       allOf:
         - $ref: '#/components/schemas/AccountRequest'
@@ -289,3 +297,7 @@ components:
           properties:
             id:
               $ref: '#/components/schemas/UUID'
+            path:
+              type: string
+              description: Derived identifier in the form Type:Method:Vendor (lowercase type)
+              example: assets:bank:monzo
