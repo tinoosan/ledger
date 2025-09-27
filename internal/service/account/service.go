@@ -11,16 +11,20 @@ import (
 
 type Repo interface {
     AccountsByUserID(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error)
+    AccountByID(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error)
 }
 
 type Writer interface {
     CreateAccount(ctx context.Context, a ledger.Account) (ledger.Account, error)
+    UpdateAccount(ctx context.Context, a ledger.Account) (ledger.Account, error)
 }
 
 type Service interface {
     ValidateCreateInput(in CreateInput) error
     Create(ctx context.Context, in CreateInput) (ledger.Account, error)
     List(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error)
+    Update(ctx context.Context, userID, accountID uuid.UUID, in UpdateInput) (ledger.Account, error)
+    Deactivate(ctx context.Context, userID, accountID uuid.UUID) error
 }
 
 type service struct {
@@ -105,3 +109,92 @@ func pathKey(t ledger.AccountType, method, vendor string) string {
 
 // ErrPathExists indicates an account with the same normalized path already exists for the user.
 var ErrPathExists = errors.New("account path already exists for user")
+
+// UpdateInput contains mutable fields for an account.
+type UpdateInput struct {
+    Name     *string
+    Method   *string
+    Vendor   *string
+    Metadata map[string]string // merged into existing keys
+}
+
+// Update applies allowed changes and records audit entries.
+func (s *service) Update(ctx context.Context, userID, accountID uuid.UUID, in UpdateInput) (ledger.Account, error) {
+    if userID == uuid.Nil || accountID == uuid.Nil {
+        return ledger.Account{}, errors.New("user_id and account_id are required")
+    }
+    acc, err := s.repo.AccountByID(ctx, userID, accountID)
+    if err != nil {
+        return ledger.Account{}, err
+    }
+    if acc.UserID != userID {
+        return ledger.Account{}, errors.New("account does not belong to user")
+    }
+    if acc.Metadata != nil && strings.EqualFold(acc.Metadata["system"], "true") {
+        return ledger.Account{}, errors.New("system accounts cannot be modified")
+    }
+
+    // Copy for comparison
+    orig := acc
+    // Apply changes with validation
+    if in.Name != nil {
+        acc.Name = *in.Name
+    }
+    if in.Method != nil {
+        acc.Method = *in.Method
+    }
+    if in.Vendor != nil {
+        acc.Vendor = *in.Vendor
+    }
+    if in.Metadata != nil {
+        if acc.Metadata == nil {
+            acc.Metadata = map[string]string{}
+        }
+        for k, v := range in.Metadata {
+            acc.Metadata[k] = v
+        }
+    }
+
+    // If method/vendor changed, ensure unique path
+    if orig.Method != acc.Method || orig.Vendor != acc.Vendor {
+        existing, err := s.repo.AccountsByUserID(ctx, userID)
+        if err != nil {
+            return ledger.Account{}, err
+        }
+        desired := pathKey(acc.Type, acc.Method, acc.Vendor)
+        for _, a := range existing {
+            if a.ID == acc.ID { continue }
+            if a.UserID == userID && pathKey(a.Type, a.Method, a.Vendor) == desired {
+                return ledger.Account{}, ErrPathExists
+            }
+        }
+    }
+
+    // Persist account
+    updated, err := s.writer.UpdateAccount(ctx, acc)
+    if err != nil {
+        return ledger.Account{}, err
+    }
+
+    return updated, nil
+}
+
+// Deactivate sets metadata["active"]="false" and audits it. No-op if system=true.
+func (s *service) Deactivate(ctx context.Context, userID, accountID uuid.UUID) error {
+    if userID == uuid.Nil || accountID == uuid.Nil {
+        return errors.New("user_id and account_id are required")
+    }
+    acc, err := s.repo.AccountByID(ctx, userID, accountID)
+    if err != nil { return err }
+    if acc.UserID != userID { return errors.New("account does not belong to user") }
+    if acc.Metadata != nil && strings.EqualFold(acc.Metadata["system"], "true") {
+        return errors.New("system accounts cannot be deactivated")
+    }
+    if acc.Metadata == nil { acc.Metadata = map[string]string{} }
+    acc.Metadata["active"] = "false"
+    if _, err := s.writer.UpdateAccount(ctx, acc); err != nil { return err }
+    return nil
+}
+
+// Merge functionality intentionally omitted per design: perform merges by
+// posting a transfer entry externally and deactivating the source account.

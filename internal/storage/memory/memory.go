@@ -2,6 +2,7 @@ package memory
 
 import (
     "context"
+    "errors"
     "sync"
 
     "github.com/google/uuid"
@@ -88,6 +89,21 @@ func (s *Store) AccountsByUserID(_ context.Context, userID uuid.UUID) ([]ledger.
 func (s *Store) CreateAccount(_ context.Context, a ledger.Account) (ledger.Account, error) {
     s.mu.Lock()
     defer s.mu.Unlock()
+    s.accounts[a.ID] = a
+    return a, nil
+}
+
+// AccountByID returns a user's account by ID.
+func (s *Store) AccountByID(_ context.Context, userID, accountID uuid.UUID) (ledger.Account, error) {
+    s.mu.Lock(); defer s.mu.Unlock()
+    a, ok := s.accounts[accountID]
+    if !ok || a.UserID != userID { return ledger.Account{}, errors.New("account not found") }
+    return a, nil
+}
+
+// UpdateAccount persists changes to an account.
+func (s *Store) UpdateAccount(_ context.Context, a ledger.Account) (ledger.Account, error) {
+    s.mu.Lock(); defer s.mu.Unlock()
     s.accounts[a.ID] = a
     return a, nil
 }

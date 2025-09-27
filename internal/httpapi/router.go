@@ -43,4 +43,6 @@ func (s *Server) routes() {
     // Accounts
     s.rt.With(s.validatePostAccount()).Post("/accounts", s.postAccount)
     s.rt.With(s.validateListAccounts()).Get("/accounts", s.listAccounts)
+    s.rt.Patch("/accounts/{id}", s.updateAccount)
+    s.rt.Delete("/accounts/{id}", s.deactivateAccount)
 }

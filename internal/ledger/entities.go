@@ -2,10 +2,10 @@ package ledger
 
 import (
     "time"
+    "strings"
 
     "github.com/google/uuid"
     "github.com/govalues/money"
-    "strings"
 )
 
 // Side represents the accounting position of a journal line.
@@ -75,6 +75,8 @@ type Account struct {
     Method   string
     // Vendor identifies the specific institution or instance (e.g., Monzo, Amex, PayPal, LandlordLtd, EmployerX).
     Vendor   string
+    // Metadata holds additional key-value attributes for the account.
+    Metadata map[string]string
 }
 
 // Path returns a colon-separated identifier for the account: Type:Method:Vendor.
@@ -82,6 +84,7 @@ type Account struct {
 func (a Account) Path() string {
     return string(a.Type) + ":" + strings.ToLower(a.Method) + ":" + strings.ToLower(a.Vendor)
 }
+
 
 // JournalEntry captures metadata for a collection of journal lines.
 type JournalEntry struct {

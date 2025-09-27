@@ -91,6 +91,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /accounts/{id}:
+    patch:
+      summary: Update an account (mutable fields only)
+      description: Update name, method, vendor, and metadata. Type and currency are immutable.
+      operationId: updateAccount
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - in: query
+          name: user_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountUpdateRequest'
+      responses:
+        '200':
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '409': { description: Conflict (duplicate path), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+    delete:
+      summary: Deactivate an account (soft delete)
+      description: Sets metadata.active=false; does not remove the account.
+      operationId: deactivateAccount
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - in: query
+          name: user_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204': { description: No Content }
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
   /entries:
     get:
       summary: List journal entries
@@ -319,3 +374,12 @@ components:
               type: string
               description: Derived identifier in the form type:method:vendor (all lowercase)
               example: assets:bank:monzo
+    AccountUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        method: { type: string }
+        vendor: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
