@@ -1,0 +1,283 @@
+package httpapi
+
+import (
+    "bytes"
+    "encoding/json"
+    "io"
+    "log/slog"
+    "net/http"
+    "net/http/httptest"
+    "testing"
+    "time"
+
+    "github.com/google/uuid"
+    "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/tinoosan/ledger/internal/storage/memory"
+)
+
+func testLogger() *slog.Logger {
+    return slog.New(slog.NewTextHandler(io.Discard, &slog.HandlerOptions{Level: slog.LevelDebug}))
+}
+
+type entryResp struct {
+    ID            string         `json:"id"`
+    UserID        string         `json:"user_id"`
+    Date          time.Time      `json:"date"`
+    Currency      string         `json:"currency"`
+    Memo          string         `json:"memo"`
+    Category      string         `json:"category"`
+    ClientEntryID string         `json:"client_entry_id"`
+    Lines         []struct {
+        ID          string `json:"id"`
+        AccountID   string `json:"account_id"`
+        Side        string `json:"side"`
+        AmountMinor int64  `json:"amount_minor"`
+    } `json:"lines"`
+}
+
+type acctResp struct {
+    ID       string `json:"id"`
+    UserID   string `json:"user_id"`
+    Name     string `json:"name"`
+    Currency string `json:"currency"`
+    Type     string `json:"type"`
+    Method   string `json:"method"`
+    Vendor   string `json:"vendor"`
+    Path     string `json:"path"`
+}
+
+func setup(t *testing.T) (*memory.Store, http.Handler, uuid.UUID, ledger.Account, ledger.Account) {
+    t.Helper()
+    store := memory.New()
+    user := ledger.User{ID: uuid.New()}
+    store.SeedUser(user)
+    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset, Method: "Cash", Vendor: "Wallet"}
+    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue, Method: "Salary", Vendor: "Employer"}
+    store.SeedAccount(cash)
+    store.SeedAccount(income)
+    h := New(store, store, testLogger()).Handler()
+    return store, h, user.ID, cash, income
+}
+
+func TestPostEntries_ValidAndInvalid(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+
+    // valid
+    body := map[string]any{
+        "user_id":        userID.String(),
+        "date":           time.Now().UTC().Format(time.RFC3339),
+        "currency":       "USD",
+        "memo":           "Lunch",
+        "category":       "eating_out",
+        "client_entry_id": "c-1",
+        "lines": []map[string]any{
+            {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 1500},
+            {"account_id": income.ID.String(), "side": "credit", "amount_minor": 1500},
+        },
+    }
+    b, _ := json.Marshal(body)
+    req := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder()
+    h.ServeHTTP(rec, req)
+    if rec.Code != http.StatusCreated {
+        t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+    }
+    var er entryResp
+    if err := json.Unmarshal(rec.Body.Bytes(), &er); err != nil {
+        t.Fatalf("decode: %v", err)
+    }
+    if er.Currency != "USD" || len(er.Lines) != 2 {
+        t.Fatalf("unexpected response: %+v", er)
+    }
+
+    // invalid: unbalanced
+    body["lines"] = []map[string]any{
+        {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 1500},
+        {"account_id": income.ID.String(), "side": "credit", "amount_minor": 1400},
+    }
+    b, _ = json.Marshal(body)
+    req = httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    req.Header.Set("Content-Type", "application/json")
+    rec = httptest.NewRecorder()
+    reqDup := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(b))
+    reqDup.Header.Set("Content-Type", "application/json")
+    h.ServeHTTP(rec, reqDup)
+    if rec.Code != http.StatusBadRequest {
+        t.Fatalf("expected 400, got %d: %s", rec.Code, rec.Body.String())
+    }
+}
+
+func TestEntries_ReverseAndList(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+
+    // create one entry
+    body := map[string]any{
+        "user_id":  userID.String(),
+        "date":     time.Now().UTC().Format(time.RFC3339),
+        "currency": "USD",
+        "memo":     "Test",
+        "category": "general",
+        "lines": []map[string]any{
+            {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 500},
+            {"account_id": income.ID.String(), "side": "credit", "amount_minor": 500},
+        },
+    }
+    b, _ := json.Marshal(body)
+    req := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder()
+    h.ServeHTTP(rec, req)
+    if rec.Code != http.StatusCreated { t.Fatalf("create entry expected 201, got %d", rec.Code) }
+    var er entryResp
+    _ = json.Unmarshal(rec.Body.Bytes(), &er)
+
+    // reverse it
+    rev := map[string]any{"user_id": userID.String(), "entry_id": er.ID}
+    rb, _ := json.Marshal(rev)
+    r2 := httptest.NewRequest(http.MethodPost, "/entries/reverse", bytes.NewReader(rb))
+    r2.Header.Set("Content-Type", "application/json")
+    rec2 := httptest.NewRecorder()
+    h.ServeHTTP(rec2, r2)
+    if rec2.Code != http.StatusCreated { t.Fatalf("reverse expected 201, got %d: %s", rec2.Code, rec2.Body.String()) }
+    var er2 entryResp
+    _ = json.Unmarshal(rec2.Body.Bytes(), &er2)
+    if len(er2.Lines) != 2 { t.Fatalf("expected 2 lines in reversal") }
+
+    // list should have at least the two
+    r3 := httptest.NewRequest(http.MethodGet, "/entries?user_id="+userID.String(), nil)
+    rec3 := httptest.NewRecorder()
+    h.ServeHTTP(rec3, r3)
+    if rec3.Code != http.StatusOK { t.Fatalf("list entries expected 200, got %d", rec3.Code) }
+}
+
+func TestAccounts_InvalidAndSystemGuards(t *testing.T) {
+    store, h, userID, _, _ := setup(t)
+
+    // missing fields -> 400
+    bad := map[string]any{"user_id": userID.String(), "name": "", "currency": "", "type": "asset"}
+    bb, _ := json.Marshal(bad)
+    r := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(bb))
+    r.Header.Set("Content-Type", "application/json")
+    rr := httptest.NewRecorder()
+    h.ServeHTTP(rr, r)
+    if rr.Code != http.StatusBadRequest { t.Fatalf("expected 400 for invalid account, got %d", rr.Code) }
+
+    // create a normal account
+    acct := map[string]any{"user_id": userID.String(), "name": "Sys", "currency": "USD", "type": "asset", "method": "Bank", "vendor": "X"}
+    ab, _ := json.Marshal(acct)
+    r2 := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(ab))
+    r2.Header.Set("Content-Type", "application/json")
+    rr2 := httptest.NewRecorder()
+    h.ServeHTTP(rr2, r2)
+    if rr2.Code != http.StatusCreated { t.Fatalf("expected 201, got %d: %s", rr2.Code, rr2.Body.String()) }
+    var ar acctResp
+    _ = json.Unmarshal(rr2.Body.Bytes(), &ar)
+
+    // mark as system in store and try to patch/delete
+    aid := uuid.MustParse(ar.ID)
+    a, _ := store.AccountByID(nil, userID, aid)
+    if a.Metadata == nil { a.Metadata = map[string]string{} }
+    a.Metadata["system"] = "true"
+    store.UpdateAccount(nil, a)
+
+    // patch -> 403
+    up := map[string]any{"name": "Noop"}
+    ub, _ := json.Marshal(up)
+    p := httptest.NewRequest(http.MethodPatch, "/accounts/"+ar.ID+"?user_id="+userID.String(), bytes.NewReader(ub))
+    p.Header.Set("Content-Type", "application/json")
+    rp := httptest.NewRecorder()
+    h.ServeHTTP(rp, p)
+    if rp.Code != http.StatusForbidden { t.Fatalf("expected 403 for system account patch, got %d", rp.Code) }
+
+    // delete -> 403
+    d := httptest.NewRequest(http.MethodDelete, "/accounts/"+ar.ID+"?user_id="+userID.String(), nil)
+    rd := httptest.NewRecorder()
+    h.ServeHTTP(rd, d)
+    if rd.Code != http.StatusForbidden { t.Fatalf("expected 403 for system account delete, got %d", rd.Code) }
+}
+
+func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
+    store, h, userID, _, _ := setup(t)
+
+    // create account
+    acct := map[string]any{
+        "user_id":  userID.String(),
+        "name":     "Monzo Current",
+        "currency": "USD",
+        "type":     "asset",
+        "method":   "Bank",
+        "vendor":   "Monzo",
+    }
+    b, _ := json.Marshal(acct)
+    req := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(b))
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder()
+    h.ServeHTTP(rec, req)
+    if rec.Code != http.StatusCreated {
+        t.Fatalf("expected 201, got %d: %s", rec.Code, rec.Body.String())
+    }
+    var ar acctResp
+    if err := json.Unmarshal(rec.Body.Bytes(), &ar); err != nil {
+        t.Fatalf("decode: %v", err)
+    }
+    if ar.Path != "asset:bank:monzo" {
+        t.Fatalf("unexpected path: %s", ar.Path)
+    }
+
+    // duplicate path -> 409
+    rec = httptest.NewRecorder()
+    reqDup := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(b))
+    reqDup.Header.Set("Content-Type", "application/json")
+    h.ServeHTTP(rec, reqDup)
+    if rec.Code != http.StatusConflict {
+        t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+    }
+
+    // list with filters
+    r2 := httptest.NewRequest(http.MethodGet, "/accounts?user_id="+userID.String()+"&method=bank&vendor=monzo&type=asset", nil)
+    rec2 := httptest.NewRecorder()
+    h.ServeHTTP(rec2, r2)
+    if rec2.Code != http.StatusOK {
+        t.Fatalf("expected 200, got %d: %s", rec2.Code, rec2.Body.String())
+    }
+    var arr []acctResp
+    if err := json.Unmarshal(rec2.Body.Bytes(), &arr); err != nil {
+        t.Fatalf("decode: %v", err)
+    }
+    if len(arr) != 1 || arr[0].Path != "asset:bank:monzo" {
+        t.Fatalf("unexpected accounts filter result: %+v", arr)
+    }
+
+    // patch (rename path + metadata)
+    up := map[string]any{"method": "Banking", "vendor": "Monzo"}
+    ub, _ := json.Marshal(up)
+    r3 := httptest.NewRequest(http.MethodPatch, "/accounts/"+ar.ID+"?user_id="+userID.String(), bytes.NewReader(ub))
+    r3.Header.Set("Content-Type", "application/json")
+    rec3 := httptest.NewRecorder()
+    h.ServeHTTP(rec3, r3)
+    if rec3.Code != http.StatusOK {
+        t.Fatalf("expected 200, got %d: %s", rec3.Code, rec3.Body.String())
+    }
+    var ar2 acctResp
+    json.Unmarshal(rec3.Body.Bytes(), &ar2)
+    if ar2.Path != "asset:banking:monzo" {
+        t.Fatalf("unexpected updated path: %s", ar2.Path)
+    }
+
+    // delete (soft)
+    r4 := httptest.NewRequest(http.MethodDelete, "/accounts/"+ar.ID+"?user_id="+userID.String(), nil)
+    rec4 := httptest.NewRecorder()
+    h.ServeHTTP(rec4, r4)
+    if rec4.Code != http.StatusNoContent {
+        t.Fatalf("expected 204, got %d: %s", rec4.Code, rec4.Body.String())
+    }
+    // verify inactive via repository
+    a, err := store.AccountByID(nil, userID, uuid.MustParse(ar.ID))
+    if err != nil {
+        t.Fatalf("AccountByID: %v", err)
+    }
+    if a.Metadata["active"] != "false" {
+        t.Fatalf("expected active=false after delete; got: %v", a.Metadata)
+    }
+}

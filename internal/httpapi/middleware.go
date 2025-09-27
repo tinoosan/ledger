@@ -4,6 +4,7 @@ import (
     "context"
     "encoding/json"
     "net/http"
+    "time"
 
     "github.com/tinoosan/ledger/internal/service/journal"
     "github.com/google/uuid"
@@ -16,6 +17,8 @@ const ctxKeyPostEntry ctxKey = "validatedPostEntry"
 const ctxKeyListEntries ctxKey = "validatedListEntries"
 const ctxKeyPostAccount ctxKey = "validatedPostAccount"
 const ctxKeyListAccounts ctxKey = "validatedListAccounts"
+const ctxKeyReverseEntry ctxKey = "validatedReverseEntry"
+const ctxKeyTrialBalance ctxKey = "validatedTrialBalance"
 
 // validatePostEntry ensures the POST /entries request adheres to business invariants
 // and stores the validated request struct in the request context for the handler to use.
@@ -59,6 +62,58 @@ func (s *Server) validateListEntries() func(http.Handler) http.Handler {
                 return
             }
             ctx := context.WithValue(r.Context(), ctxKeyListEntries, listEntriesQuery{UserID: uid})
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+
+// validateReverseEntry parses POST /entries/reverse body
+func (s *Server) validateReverseEntry() func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            var req reverseEntryRequest
+            dec := json.NewDecoder(r.Body)
+            dec.DisallowUnknownFields()
+            if err := dec.Decode(&req); err != nil {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON: "+err.Error()})
+                return
+            }
+            if req.UserID == uuid.Nil || req.EntryID == uuid.Nil {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id and entry_id are required"})
+                return
+            }
+            ctx := context.WithValue(r.Context(), ctxKeyReverseEntry, req)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+
+// validateTrialBalance parses GET /trial-balance query
+func (s *Server) validateTrialBalance() func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            q := r.URL.Query()
+            userStr := q.Get("user_id")
+            if userStr == "" {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
+                return
+            }
+            uid, err := uuid.Parse(userStr)
+            if err != nil {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
+                return
+            }
+            var asOf *time.Time
+            if raw := q.Get("as_of"); raw != "" {
+                if t, err := time.Parse(time.RFC3339, raw); err == nil {
+                    tt := t.UTC()
+                    asOf = &tt
+                } else {
+                    toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid as_of"})
+                    return
+                }
+            }
+            ctx := context.WithValue(r.Context(), ctxKeyTrialBalance, trialBalanceQuery{UserID: uid, AsOf: asOf})
             next.ServeHTTP(w, r.WithContext(ctx))
         })
     }

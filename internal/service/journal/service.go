@@ -15,6 +15,7 @@ import (
 type Repo interface {
     AccountsByIDs(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]ledger.Account, error)
     EntriesByUserID(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
+    EntryByID(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error)
 }
 
 // Writer defines write operations needed by the service.
@@ -27,6 +28,8 @@ type Service interface {
     ValidateEntryInput(ctx context.Context, in EntryInput) error
     CreateEntry(ctx context.Context, in EntryInput) (ledger.JournalEntry, error)
     ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
+    ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error)
+    TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error)
 }
 
 type service struct {
@@ -143,6 +146,67 @@ func (s *service) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.J
         return nil, errors.New("user_id is required")
     }
     return s.repo.EntriesByUserID(ctx, userID)
+}
+
+func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error) {
+    if userID == uuid.Nil || entryID == uuid.Nil {
+        return ledger.JournalEntry{}, errors.New("user_id and entry_id are required")
+    }
+    orig, err := s.repo.EntryByID(ctx, userID, entryID)
+    if err != nil {
+        return ledger.JournalEntry{}, err
+    }
+    if orig.UserID != userID {
+        return ledger.JournalEntry{}, errors.New("entry does not belong to user")
+    }
+    rid := uuid.New()
+    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(orig.Lines.ByID))}
+    for _, ln := range orig.Lines.ByID {
+        nl := *ln
+        nl.ID = uuid.New()
+        nl.EntryID = rid
+        if ln.Side == ledger.SideDebit { nl.Side = ledger.SideCredit } else { nl.Side = ledger.SideDebit }
+        lines.ByID[nl.ID] = &nl
+    }
+    e := ledger.JournalEntry{
+        ID:       rid,
+        UserID:   userID,
+        Date:     date,
+        Currency: orig.Currency,
+        Memo:     "reversal of " + orig.ID.String() + ": " + orig.Memo,
+        Category: orig.Category,
+        Lines:    lines,
+    }
+    return s.writer.CreateJournalEntry(ctx, e)
+}
+
+// TrialBalance returns net amounts per account (debits - credits) up to asOf (inclusive).
+func (s *service) TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error) {
+    if userID == uuid.Nil {
+        return nil, errors.New("user_id is required")
+    }
+    entries, err := s.repo.EntriesByUserID(ctx, userID)
+    if err != nil { return nil, err }
+    out := make(map[uuid.UUID]money.Amount)
+    for _, e := range entries {
+        if asOf != nil && e.Date.After(*asOf) {
+            continue
+        }
+        for _, ln := range e.Lines.ByID {
+            curr := ln.Amount.Curr().Code()
+            // initialize zero amount for currency if needed
+            if _, ok := out[ln.AccountID]; !ok {
+                out[ln.AccountID], _ = money.NewAmountFromMinorUnits(curr, 0)
+            }
+            switch ln.Side {
+            case ledger.SideDebit:
+                if v, err := out[ln.AccountID].Add(ln.Amount); err == nil { out[ln.AccountID] = v }
+            case ledger.SideCredit:
+                if v, err := out[ln.AccountID].Sub(ln.Amount); err == nil { out[ln.AccountID] = v }
+            }
+        }
+    }
+    return out, nil
 }
 
 func fieldErr(i int, msg string) error { return errors.New("line[" + itoa(i) + "]: " + msg) }

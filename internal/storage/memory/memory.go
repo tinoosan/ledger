@@ -72,6 +72,14 @@ func (s *Store) EntriesByUserID(_ context.Context, userID uuid.UUID) ([]ledger.J
     return out, nil
 }
 
+// EntryByID returns a single entry for a user.
+func (s *Store) EntryByID(_ context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error) {
+    s.mu.Lock(); defer s.mu.Unlock()
+    e, ok := s.entries[entryID]
+    if !ok || e.UserID != userID { return ledger.JournalEntry{}, errors.New("entry not found") }
+    return *e, nil
+}
+
 // AccountsByUserID returns accounts for a user.
 func (s *Store) AccountsByUserID(_ context.Context, userID uuid.UUID) ([]ledger.Account, error) {
     s.mu.Lock()

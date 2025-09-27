@@ -8,6 +8,50 @@ servers:
   - url: http://localhost:8080
     description: Local development
 paths:
+  /trial-balance:
+    get:
+      summary: Trial balance
+      description: Returns net debit/credit per account for the user, optionally up to as_of.
+      operationId: trialBalance
+      tags:
+        - reports
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - in: query
+          name: as_of
+          required: false
+          schema:
+            type: string
+            format: date-time
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  user_id:
+                    $ref: '#/components/schemas/UUID'
+                  as_of:
+                    type: string
+                    format: date-time
+                  accounts:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        account_id: { $ref: '#/components/schemas/UUID' }
+                        name: { type: string }
+                        path: { type: string }
+                        currency: { type: string }
+                        type: { $ref: '#/components/schemas/AccountType' }
+                        debit_minor: { type: integer, format: int64 }
+                        credit_minor: { type: integer, format: int64 }
   /accounts:
     get:
       summary: List accounts
@@ -383,3 +427,32 @@ components:
         metadata:
           type: object
           additionalProperties: { type: string }
+  /entries/reverse:
+    post:
+      summary: Reverse a journal entry
+      description: Creates a reversing entry by flipping all lines of the specified entry.
+      operationId: reverseEntry
+      tags: [entries]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, entry_id]
+              properties:
+                user_id: { $ref: '#/components/schemas/UUID' }
+                entry_id: { $ref: '#/components/schemas/UUID' }
+                date:
+                  type: string
+                  format: date-time
+                  description: Optional override date for the reversal (defaults to now)
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JournalEntryResponse'
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }

@@ -50,6 +50,36 @@ type listEntriesQuery struct {
     UserID uuid.UUID
 }
 
+// Reverse entry
+type reverseEntryRequest struct {
+    UserID  uuid.UUID `json:"user_id"`
+    EntryID uuid.UUID `json:"entry_id"`
+    // optional date; if omitted handler sets time.Now()
+    Date    *time.Time `json:"date,omitempty"`
+}
+
+// Trial balance
+type trialBalanceQuery struct {
+    UserID uuid.UUID
+    AsOf   *time.Time
+}
+
+type trialBalanceAccount struct {
+    AccountID   uuid.UUID          `json:"account_id"`
+    Name        string             `json:"name"`
+    Path        string             `json:"path"`
+    Currency    string             `json:"currency"`
+    DebitMinor  int64              `json:"debit_minor"`
+    CreditMinor int64              `json:"credit_minor"`
+    Type        ledger.AccountType `json:"type"`
+}
+
+type trialBalanceResponse struct {
+    UserID   uuid.UUID             `json:"user_id"`
+    AsOf     *time.Time            `json:"as_of,omitempty"`
+    Accounts []trialBalanceAccount `json:"accounts"`
+}
+
 // Accounts
 
 type postAccountRequest struct {
