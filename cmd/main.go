@@ -2,13 +2,12 @@ package main
 
 import (
     "context"
-    "log"
     "net/http"
     "os"
     "os/signal"
     "syscall"
     "time"
-
+    "log/slog"
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
     "github.com/tinoosan/ledger/internal/httpapi"
@@ -18,6 +17,11 @@ import (
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
+
+    // Logger (slog to stdout). Level via LOG_LEVEL = DEBUG|INFO|WARNING|ERROR
+    level := parseLogLevel(os.Getenv("LOG_LEVEL"))
+    logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
+    slog.SetDefault(logger)
 
     // In-memory repository for now
     store := memory.New()
@@ -29,9 +33,9 @@ func main() {
     income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue}
     store.SeedAccount(cash)
     store.SeedAccount(income)
-    log.Printf("DEV seed -> user_id=%s cash_account_id=%s income_account_id=%s", user.ID, cash.ID, income.ID)
+    logger.Info("DEV seed", "user_id", user.ID.String(), "cash_account_id", cash.ID.String(), "income_account_id", income.ID.String())
 
-    srvMux := httpapi.New(store, store).Handler()
+    srvMux := httpapi.New(store, store, logger).Handler()
 
 	srv := &http.Server{
 		Addr:              ":8080",
@@ -43,22 +47,35 @@ func main() {
 	}
 
 	errCh := make(chan error, 1)
-	go func() {
-		log.Printf("ledger service listening on %s", srv.Addr)
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			errCh <- err
-		}
-	}()
+    go func() {
+        logger.Info("ledger service listening", "addr", srv.Addr)
+        if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+            errCh <- err
+        }
+    }()
 
 	select {
 	case <-ctx.Done():
 		ctxShutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
-		if err := srv.Shutdown(ctxShutdown); err != nil {
-			log.Printf("server shutdown error: %v", err)
-		}
-	case err := <-errCh:
-		log.Fatalf("server error: %v", err)
-	}
+        if err := srv.Shutdown(ctxShutdown); err != nil {
+            logger.Error("server shutdown error", "err", err)
+        }
+    case err := <-errCh:
+        logger.Error("server error", "err", err)
+    }
 }
  
+// parseLogLevel maps env values to slog.Leveler
+func parseLogLevel(s string) slog.Leveler {
+    switch s {
+    case "DEBUG", "debug":
+        return slog.LevelDebug
+    case "WARN", "WARNING", "warn", "warning":
+        return slog.LevelWarn
+    case "ERROR", "ERR", "error", "err":
+        return slog.LevelError
+    default:
+        return slog.LevelInfo
+    }
+}
