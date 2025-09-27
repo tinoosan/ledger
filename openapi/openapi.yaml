@@ -2,208 +2,36 @@ openapi: 3.0.3
 info:
   title: Ledger Service API
   version: 0.1.0
-  description: >-
-    Validation + storage service for journal entries.
+  description: Validation + storage service for journal entries and accounts
 servers:
   - url: http://localhost:8080
     description: Local development
 paths:
-  /trial-balance:
+  /healthz:
     get:
-      summary: Trial balance
-      description: Returns net debit/credit per account for the user, optionally up to as_of.
-      operationId: trialBalance
-      tags:
-        - reports
-      parameters:
-        - in: query
-          name: user_id
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-        - in: query
-          name: as_of
-          required: false
-          schema:
-            type: string
-            format: date-time
+      summary: Liveness probe
+      operationId: healthz
+      tags: [ops]
       responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  user_id:
-                    $ref: '#/components/schemas/UUID'
-                  as_of:
-                    type: string
-                    format: date-time
-                  accounts:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        account_id: { $ref: '#/components/schemas/UUID' }
-                        name: { type: string }
-                        path: { type: string }
-                        currency: { type: string }
-                        type: { $ref: '#/components/schemas/AccountType' }
-                        debit_minor: { type: integer, format: int64 }
-                        credit_minor: { type: integer, format: int64 }
-  /accounts:
+        '200': { description: OK }
+  /readyz:
     get:
-      summary: List accounts
-      description: Returns all accounts for a given user.
-      operationId: listAccounts
-      tags:
-        - accounts
-      parameters:
-        - in: query
-          name: user_id
-          required: true
-          description: ID of the user whose accounts to fetch
-          schema:
-            $ref: '#/components/schemas/UUID'
-        - in: query
-          name: method
-          required: false
-          description: Filter accounts by method (case-insensitive)
-          schema:
-            type: string
-        - in: query
-          name: vendor
-          required: false
-          description: Filter accounts by vendor (case-insensitive)
-          schema:
-            type: string
-        - in: query
-          name: type
-          required: false
-          description: Filter accounts by account type
-          schema:
-            $ref: '#/components/schemas/AccountType'
+      summary: Readiness probe
+      operationId: readyz
+      tags: [ops]
       responses:
-        '200':
-          description: OK
-          content:
-            application/json:
-              schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/AccountResponse'
-        '400':
-          description: Bad request (validation failed)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-    post:
-      summary: Create an account
-      operationId: createAccount
-      tags:
-        - accounts
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccountRequest'
-      responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountResponse'
-        '400':
-          description: Bad request (validation failed)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-  /accounts/{id}:
-    patch:
-      summary: Update an account (mutable fields only)
-      description: Update name, method, vendor, and metadata. Type and currency are immutable.
-      operationId: updateAccount
-      tags: [accounts]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-        - in: query
-          name: user_id
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/AccountUpdateRequest'
-      responses:
-        '200':
-          description: Updated
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/AccountResponse'
-        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '409': { description: Conflict (duplicate path), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-    delete:
-      summary: Deactivate an account (soft delete)
-      description: Sets metadata.active=false; does not remove the account.
-      operationId: deactivateAccount
-      tags: [accounts]
-      parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-        - in: query
-          name: user_id
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-      responses:
-        '204': { description: No Content }
-        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+        '200': { description: OK }
+
   /entries:
     get:
       summary: List journal entries
-      description: Returns all journal entries for a given user.
       operationId: listEntries
-      tags:
-        - entries
+      tags: [entries]
       parameters:
         - in: query
           name: user_id
           required: true
-          description: ID of the user whose entries to fetch
-          schema:
-            $ref: '#/components/schemas/UUID'
+          schema: { $ref: '#/components/schemas/UUID' }
       responses:
         '200':
           description: OK
@@ -211,226 +39,45 @@ paths:
             application/json:
               schema:
                 type: array
-                items:
-                  $ref: '#/components/schemas/JournalEntryResponse'
-        '400':
-          description: Bad request (validation failed)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
+                items: { $ref: '#/components/schemas/JournalEntryResponse' }
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
     post:
       summary: Create a journal entry
-      description: >-
-        Accepts a journal entry with N lines, enforces invariants, writes atomically,
-        and returns the posted entry.
       operationId: createEntry
-      tags:
-        - entries
+      tags: [entries]
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              $ref: '#/components/schemas/JournalEntryRequest'
-            examples:
-              example:
-                value:
-                  user_id: 11111111-1111-1111-1111-111111111111
-                  date: 2025-09-27T12:00:00Z
-                  currency: USD
-                  memo: Lunch
-                  category: eating_out
-                  client_entry_id: dev-1
-                  lines:
-                    - account_id: 22222222-2222-2222-2222-222222222222
-                      side: debit
-                      amount_minor: 1500
-                    - account_id: 33333333-3333-3333-3333-333333333333
-                      side: credit
-                      amount_minor: 1500
+            schema: { $ref: '#/components/schemas/JournalEntryRequest' }
       responses:
-        '201':
-          description: Created
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/JournalEntryResponse'
-        '400':
-          description: Bad request (validation failed)
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-        '500':
-          description: Internal server error
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Error'
-components:
-  schemas:
-    UUID:
-      type: string
-      format: uuid
-      example: 11111111-1111-1111-1111-111111111111
-    MoneyMinor:
-      type: integer
-      format: int64
-      description: Amount in minor units (e.g., cents for USD)
-      example: 1500
-    Side:
-      type: string
-      enum: [debit, credit]
-    Category:
-      type: string
-      enum:
-        - uncategorized
-        - general
-        - eating_out
-        - groceries
-        - transport
-        - shopping
-        - entertainment
-        - bills
-        - travel
-        - expenses
-        - income
-        - transfers
-        - savings
-        - charity
-        - family
-        - gifts
-        - personal_care
-        - business
-    JournalLineRequest:
-      type: object
-      required: [account_id, side, amount_minor]
-      properties:
-        account_id:
-          $ref: '#/components/schemas/UUID'
-        side:
-          $ref: '#/components/schemas/Side'
-        amount_minor:
-          $ref: '#/components/schemas/MoneyMinor'
-    JournalLineResponse:
-      allOf:
-        - $ref: '#/components/schemas/JournalLineRequest'
-        - type: object
-          required: [id]
-          properties:
-            id:
-              $ref: '#/components/schemas/UUID'
-    JournalEntryRequest:
-      type: object
-      required: [user_id, date, currency, lines]
-      properties:
-        user_id:
-          $ref: '#/components/schemas/UUID'
-        date:
-          type: string
-          format: date-time
-          description: RFC3339 timestamp
-        currency:
-          type: string
-          description: ISO 4217 currency code
-          example: USD
-        memo:
-          type: string
-        category:
-          $ref: '#/components/schemas/Category'
-        client_entry_id:
-          type: string
-        lines:
-          type: array
-          minItems: 2
-          items:
-            $ref: '#/components/schemas/JournalLineRequest'
-    JournalEntryResponse:
-      type: object
-      required: [id, user_id, date, currency, lines]
-      properties:
-        id:
-          $ref: '#/components/schemas/UUID'
-        user_id:
-          $ref: '#/components/schemas/UUID'
-        date:
-          type: string
-          format: date-time
-        currency:
-          type: string
-        memo:
-          type: string
-        category:
-          $ref: '#/components/schemas/Category'
-        client_entry_id:
-          type: string
-        lines:
-          type: array
-          items:
-            $ref: '#/components/schemas/JournalLineResponse'
-    Error:
-      type: object
-      required: [error]
-      properties:
-        error:
-          type: string
-          example: sum(debits) must equal sum(credits)
-    AccountType:
-      type: string
-      enum: [asset, liability, equity, revenue, expense]
-    AccountRequest:
-      type: object
-      required: [user_id, name, currency, type, method, vendor]
-      properties:
-        user_id:
-          $ref: '#/components/schemas/UUID'
-        name:
-          type: string
-        currency:
-          type: string
-          description: ISO 4217 currency code
-        type:
-          $ref: '#/components/schemas/AccountType'
-        method:
-          type: string
-          description: Instrument or sub-type (e.g., Bank, CreditCard, Cash, Savings, Loan, Rent, Salary)
-          example: Bank
-        vendor:
-          type: string
-          description: Specific institution or identifier (e.g., Monzo, Amex, PayPal, LandlordLtd, EmployerX)
-          example: Monzo
-    AccountResponse:
-      allOf:
-        - $ref: '#/components/schemas/AccountRequest'
-        - type: object
-          required: [id]
-          properties:
-            id:
-              $ref: '#/components/schemas/UUID'
-            path:
-              type: string
-              description: Derived identifier in the form type:method:vendor (all lowercase)
-              example: assets:bank:monzo
-    AccountUpdateRequest:
-      type: object
-      properties:
-        name: { type: string }
-        method: { type: string }
-        vendor: { type: string }
-        metadata:
-          type: object
-          additionalProperties: { type: string }
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
+  /entries/{id}:
+    get:
+      summary: Get one journal entry
+      operationId: getEntry
+      tags: [entries]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '404': { description: Not found }
+
   /entries/reverse:
     post:
       summary: Reverse a journal entry
-      description: Creates a reversing entry by flipping all lines of the specified entry.
       operationId: reverseEntry
       tags: [entries]
       requestBody:
@@ -448,11 +95,342 @@ components:
                   format: date-time
                   description: Optional override date for the reversal (defaults to now)
       responses:
-        '201':
-          description: Created
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
+  /idempotency/entries/{client_entry_id}:
+    get:
+      summary: Resolve entry by client_entry_id
+      operationId: getEntryByClientId
+      tags: [entries]
+      parameters:
+        - in: path
+          name: client_entry_id
+          required: true
+          schema: { type: string }
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '404': { description: Not found }
+
+  /trial-balance:
+    get:
+      summary: Trial balance
+      operationId: trialBalance
+      tags: [reports]
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: as_of
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200':
+          description: OK
           content:
             application/json:
-              schema:
-                $ref: '#/components/schemas/JournalEntryResponse'
-        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
-        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } } }
+              schema: { $ref: '#/components/schemas/TrialBalanceResponse' }
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
+  /accounts:
+    get:
+      summary: List accounts
+      operationId: listAccounts
+      tags: [accounts]
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: method
+          required: false
+          schema: { type: string }
+        - in: query
+          name: vendor
+          required: false
+          schema: { type: string }
+        - in: query
+          name: type
+          required: false
+          schema: { $ref: '#/components/schemas/AccountType' }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AccountResponse' }}}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+    post:
+      summary: Create an account
+      operationId: createAccount
+      tags: [accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountRequest' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
+  /accounts/{id}:
+    patch:
+      summary: Update an account (mutable fields only)
+      operationId: updateAccount
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AccountUpdateRequest' }
+      responses:
+        '200': { description: Updated, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '409': { description: Conflict (duplicate path), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+    delete:
+      summary: Deactivate an account (soft delete)
+      operationId: deactivateAccount
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+      responses:
+        '204': { description: No Content }
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
+  /accounts/{id}/balance:
+    get:
+      summary: Get account balance
+      operationId: getAccountBalance
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: as_of
+          required: false
+          schema: { type: string, format: date-time }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AccountBalanceResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
+  /accounts/{id}/ledger:
+    get:
+      summary: Get account ledger feed
+      operationId: getAccountLedger
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: from
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: to
+          required: false
+          schema: { type: string, format: date-time }
+        - in: query
+          name: limit
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+        - in: query
+          name: cursor
+          required: false
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AccountLedgerResponse' }
+
+components:
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+      example: 11111111-1111-1111-1111-111111111111
+    MoneyMinor:
+      type: integer
+      format: int64
+      description: Amount in minor units (e.g., cents for USD)
+      example: 1500
+    Side:
+      type: string
+      enum: [debit, credit]
+    Category:
+      type: string
+      enum: [uncategorized, general, eating_out, groceries, transport, shopping, entertainment, bills, travel, expenses, income, transfers, savings, charity, family, gifts, personal_care, business]
+    AccountType:
+      type: string
+      enum: [asset, liability, equity, revenue, expense]
+
+    JournalLineRequest:
+      type: object
+      required: [account_id, side, amount_minor]
+      properties:
+        account_id: { $ref: '#/components/schemas/UUID' }
+        side: { $ref: '#/components/schemas/Side' }
+        amount_minor: { $ref: '#/components/schemas/MoneyMinor' }
+    JournalLineResponse:
+      allOf:
+        - $ref: '#/components/schemas/JournalLineRequest'
+        - type: object
+          required: [id]
+          properties:
+            id: { $ref: '#/components/schemas/UUID' }
+
+    JournalEntryRequest:
+      type: object
+      required: [user_id, date, currency, lines]
+      properties:
+        user_id: { $ref: '#/components/schemas/UUID' }
+        date:
+          type: string
+          format: date-time
+          description: RFC3339 timestamp
+        currency:
+          type: string
+          description: ISO 4217 currency code
+          example: USD
+        memo: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        client_entry_id: { type: string }
+        lines:
+          type: array
+          minItems: 2
+          items: { $ref: '#/components/schemas/JournalLineRequest' }
+    JournalEntryResponse:
+      type: object
+      required: [id, user_id, date, currency, lines]
+      properties:
+        id: { $ref: '#/components/schemas/UUID' }
+        user_id: { $ref: '#/components/schemas/UUID' }
+        date: { type: string, format: date-time }
+        currency: { type: string }
+        memo: { type: string }
+        category: { $ref: '#/components/schemas/Category' }
+        client_entry_id: { type: string }
+        lines:
+          type: array
+          items: { $ref: '#/components/schemas/JournalLineResponse' }
+
+    AccountRequest:
+      type: object
+      required: [user_id, name, currency, type, method, vendor]
+      properties:
+        user_id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string }
+        currency: { type: string, description: ISO 4217 currency code }
+        type: { $ref: '#/components/schemas/AccountType' }
+        method: { type: string, description: Instrument or sub-type (e.g., Bank, CreditCard, Cash) }
+        vendor: { type: string, description: Institution/identifier (e.g., Monzo, Amex, PayPal) }
+    AccountUpdateRequest:
+      type: object
+      properties:
+        name: { type: string }
+        method: { type: string }
+        vendor: { type: string }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+    AccountResponse:
+      allOf:
+        - $ref: '#/components/schemas/AccountRequest'
+        - type: object
+          required: [id]
+          properties:
+            id: { $ref: '#/components/schemas/UUID' }
+            path:
+              type: string
+              description: Derived identifier type:method:vendor (lowercase)
+              example: assets:bank:monzo
+
+    AccountBalanceResponse:
+      type: object
+      properties:
+        user_id: { $ref: '#/components/schemas/UUID' }
+        account_id: { $ref: '#/components/schemas/UUID' }
+        as_of: { type: string, format: date-time }
+        currency: { type: string }
+        balance_minor: { type: integer, format: int64 }
+
+    AccountLedgerItem:
+      type: object
+      properties:
+        date: { type: string, format: date-time }
+        entry_id: { $ref: '#/components/schemas/UUID' }
+        line_id: { $ref: '#/components/schemas/UUID' }
+        side: { $ref: '#/components/schemas/Side' }
+        amount_minor: { type: integer, format: int64 }
+        running_balance_minor: { type: integer, format: int64 }
+    AccountLedgerResponse:
+      type: object
+      properties:
+        user_id: { $ref: '#/components/schemas/UUID' }
+        account_id: { $ref: '#/components/schemas/UUID' }
+        currency: { type: string }
+        items:
+          type: array
+          items: { $ref: '#/components/schemas/AccountLedgerItem' }
+        next_cursor: { type: string }
+
+    TrialBalanceAccount:
+      type: object
+      properties:
+        account_id: { $ref: '#/components/schemas/UUID' }
+        name: { type: string }
+        path: { type: string }
+        currency: { type: string }
+        type: { $ref: '#/components/schemas/AccountType' }
+        debit_minor: { type: integer, format: int64 }
+        credit_minor: { type: integer, format: int64 }
+    TrialBalanceResponse:
+      type: object
+      properties:
+        user_id: { $ref: '#/components/schemas/UUID' }
+        as_of: { type: string, format: date-time }
+        accounts:
+          type: array
+          items: { $ref: '#/components/schemas/TrialBalanceAccount' }
+
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error: { type: string }
+
