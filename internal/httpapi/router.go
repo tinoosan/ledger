@@ -7,11 +7,13 @@ import (
     chimw "github.com/go-chi/chi/v5/middleware"
     "log/slog"
     "github.com/tinoosan/ledger/internal/service/journal"
+    "github.com/tinoosan/ledger/internal/service/account"
 )
 
 // Server wires handlers and middleware using Chi.
 type Server struct {
     svc    journal.Service
+    accountSvc account.Service
     log    *slog.Logger
     rt     *chi.Mux
 }
@@ -23,7 +25,7 @@ func New(repo Repository, writer Writer, logger *slog.Logger) *Server {
     r.Use(requestLogger(logger))
     r.Use(recoverer(logger))
 
-    s := &Server{svc: journal.New(repo, writer), rt: r, log: logger}
+    s := &Server{svc: journal.New(repo, writer), accountSvc: account.New(repo, writer), rt: r, log: logger}
     s.routes()
     return s
 }
@@ -38,4 +40,7 @@ func (s *Server) routes() {
     // Entries
     s.rt.With(s.validatePostEntry()).Post("/entries", s.postEntry)
     s.rt.With(s.validateListEntries()).Get("/entries", s.listEntries)
+    // Accounts
+    s.rt.With(s.validatePostAccount()).Post("/accounts", s.postAccount)
+    s.rt.With(s.validateListAccounts()).Get("/accounts", s.listAccounts)
 }

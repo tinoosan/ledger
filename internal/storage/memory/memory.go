@@ -70,3 +70,24 @@ func (s *Store) EntriesByUserID(_ context.Context, userID uuid.UUID) ([]ledger.J
     }
     return out, nil
 }
+
+// AccountsByUserID returns accounts for a user.
+func (s *Store) AccountsByUserID(_ context.Context, userID uuid.UUID) ([]ledger.Account, error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    out := make([]ledger.Account, 0)
+    for _, a := range s.accounts {
+        if a.UserID == userID {
+            out = append(out, a)
+        }
+    }
+    return out, nil
+}
+
+// CreateAccount persists a new account.
+func (s *Store) CreateAccount(_ context.Context, a ledger.Account) (ledger.Account, error) {
+    s.mu.Lock()
+    defer s.mu.Unlock()
+    s.accounts[a.ID] = a
+    return a, nil
+}

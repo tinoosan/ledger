@@ -49,3 +49,24 @@ type lineResponse struct {
 type listEntriesQuery struct {
     UserID uuid.UUID
 }
+
+// Accounts
+
+type postAccountRequest struct {
+    UserID   uuid.UUID           `json:"user_id"`
+    Name     string              `json:"name"`
+    Currency string              `json:"currency"`
+    Type     ledger.AccountType  `json:"type"`
+}
+
+type accountResponse struct {
+    ID       uuid.UUID           `json:"id"`
+    UserID   uuid.UUID           `json:"user_id"`
+    Name     string              `json:"name"`
+    Currency string              `json:"currency"`
+    Type     ledger.AccountType  `json:"type"`
+}
+
+type listAccountsQuery struct {
+    UserID uuid.UUID
+}

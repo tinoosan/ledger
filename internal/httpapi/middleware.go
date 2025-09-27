@@ -7,12 +7,15 @@ import (
 
     "github.com/tinoosan/ledger/internal/service/journal"
     "github.com/google/uuid"
+    "github.com/tinoosan/ledger/internal/service/account"
 )
 
 type ctxKey string
 
 const ctxKeyPostEntry ctxKey = "validatedPostEntry"
 const ctxKeyListEntries ctxKey = "validatedListEntries"
+const ctxKeyPostAccount ctxKey = "validatedPostAccount"
+const ctxKeyListAccounts ctxKey = "validatedListAccounts"
 
 // validatePostEntry ensures the POST /entries request adheres to business invariants
 // and stores the validated request struct in the request context for the handler to use.
@@ -58,6 +61,57 @@ func (s *Server) validateListEntries() func(http.Handler) http.Handler {
             ctx := context.WithValue(r.Context(), ctxKeyListEntries, listEntriesQuery{UserID: uid})
             next.ServeHTTP(w, r.WithContext(ctx))
         })
+    }
+}
+
+// validatePostAccount parses and validates POST /accounts body and stores CreateInput.
+func (s *Server) validatePostAccount() func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            var req postAccountRequest
+            dec := json.NewDecoder(r.Body)
+            dec.DisallowUnknownFields()
+            if err := dec.Decode(&req); err != nil {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON: "+err.Error()})
+                return
+            }
+            in := toAccountCreateInput(req)
+            if err := s.accountSvc.ValidateCreateInput(in); err != nil {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+                return
+            }
+            ctx := context.WithValue(r.Context(), ctxKeyPostAccount, in)
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+
+// validateListAccounts validates query params for GET /accounts.
+func (s *Server) validateListAccounts() func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            raw := r.URL.Query().Get("user_id")
+            if raw == "" {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
+                return
+            }
+            uid, err := uuid.Parse(raw)
+            if err != nil {
+                toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
+                return
+            }
+            ctx := context.WithValue(r.Context(), ctxKeyListAccounts, listAccountsQuery{UserID: uid})
+            next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+
+func toAccountCreateInput(req postAccountRequest) account.CreateInput {
+    return account.CreateInput{
+        UserID:   req.UserID,
+        Name:     req.Name,
+        Currency: req.Currency,
+        Type:     req.Type,
     }
 }
 

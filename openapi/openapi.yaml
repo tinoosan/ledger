@@ -8,6 +8,71 @@ servers:
   - url: http://localhost:8080
     description: Local development
 paths:
+  /accounts:
+    get:
+      summary: List accounts
+      description: Returns all accounts for a given user.
+      operationId: listAccounts
+      tags:
+        - accounts
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          description: ID of the user whose accounts to fetch
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/AccountResponse'
+        '400':
+          description: Bad request (validation failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      summary: Create an account
+      operationId: createAccount
+      tags:
+        - accounts
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AccountRequest'
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AccountResponse'
+        '400':
+          description: Bad request (validation failed)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /entries:
     get:
       summary: List journal entries
@@ -200,3 +265,27 @@ components:
         error:
           type: string
           example: sum(debits) must equal sum(credits)
+    AccountType:
+      type: string
+      enum: [asset, liability, equity, revenue, expense]
+    AccountRequest:
+      type: object
+      required: [user_id, name, currency, type]
+      properties:
+        user_id:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+        currency:
+          type: string
+          description: ISO 4217 currency code
+        type:
+          $ref: '#/components/schemas/AccountType'
+    AccountResponse:
+      allOf:
+        - $ref: '#/components/schemas/AccountRequest'
+        - type: object
+          required: [id]
+          properties:
+            id:
+              $ref: '#/components/schemas/UUID'
