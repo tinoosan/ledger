@@ -103,6 +103,7 @@ func (s *Server) validateListAccounts() func(http.Handler) http.Handler {
             q := listAccountsQuery{UserID: uid}
             if m := r.URL.Query().Get("method"); m != "" { q.Method = m }
             if v := r.URL.Query().Get("vendor"); v != "" { q.Vendor = v }
+            if t := r.URL.Query().Get("type"); t != "" { q.Type = t }
             ctx := context.WithValue(r.Context(), ctxKeyListAccounts, q)
             next.ServeHTTP(w, r.WithContext(ctx))
         })

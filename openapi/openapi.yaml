@@ -34,6 +34,12 @@ paths:
           description: Filter accounts by vendor (case-insensitive)
           schema:
             type: string
+        - in: query
+          name: type
+          required: false
+          description: Filter accounts by account type
+          schema:
+            $ref: '#/components/schemas/AccountType'
       responses:
         '200':
           description: OK

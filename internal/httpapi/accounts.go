@@ -44,6 +44,7 @@ func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
     for _, a := range accs {
         if q.Method != "" && !equalsFold(a.Method, q.Method) { continue }
         if q.Vendor != "" && !equalsFold(a.Vendor, q.Vendor) { continue }
+        if q.Type   != "" && !equalsFold(string(a.Type), q.Type) { continue }
         out = append(out, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Method: a.Method, Vendor: a.Vendor, Path: a.Path()})
     }
     toJSON(w, http.StatusOK, out)
