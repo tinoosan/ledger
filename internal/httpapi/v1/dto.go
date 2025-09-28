@@ -1,136 +1,135 @@
 package v1
 
 import (
-    "time"
+	"time"
 
-    "github.com/google/uuid"
-    "github.com/tinoosan/ledger/internal/ledger"
-    "github.com/tinoosan/ledger/internal/meta"
+	"github.com/google/uuid"
+	"github.com/tinoosan/ledger/internal/ledger"
+	"github.com/tinoosan/ledger/internal/meta"
 )
 
 type postEntryRequest struct {
-    UserID        uuid.UUID       `json:"user_id"`
-    Date          time.Time       `json:"date"`
-    Currency      string          `json:"currency"`
-    Memo          string          `json:"memo"`
-    Category      ledger.Category `json:"category"`
-    Metadata      map[string]string `json:"metadata,omitempty"`
-    Lines         []postEntryLine `json:"lines"`
+	UserID   uuid.UUID         `json:"user_id"`
+	Date     time.Time         `json:"date"`
+	Currency string            `json:"currency"`
+	Memo     string            `json:"memo"`
+	Category ledger.Category   `json:"category"`
+	Metadata map[string]string `json:"metadata,omitempty"`
+	Lines    []postEntryLine   `json:"lines"`
 }
 
 type postEntryLine struct {
-    AccountID   uuid.UUID   `json:"account_id"`
-    Side        ledger.Side `json:"side"`
-    AmountMinor int64       `json:"amount_minor"`
+	AccountID   uuid.UUID   `json:"account_id"`
+	Side        ledger.Side `json:"side"`
+	AmountMinor int64       `json:"amount_minor"`
 }
 
-
 type entryResponse struct {
-    ID            uuid.UUID       `json:"id"`
-    UserID        uuid.UUID       `json:"user_id"`
-    Date          time.Time       `json:"date"`
-    Currency      string          `json:"currency"`
-    Memo          string          `json:"memo"`
-    Category      ledger.Category `json:"category"`
-    Metadata      meta.Metadata `json:"metadata,omitempty"`
-    IsReversed    bool            `json:"is_reversed"`
-    Lines         []lineResponse  `json:"lines"`
+	ID         uuid.UUID       `json:"id"`
+	UserID     uuid.UUID       `json:"user_id"`
+	Date       time.Time       `json:"date"`
+	Currency   string          `json:"currency"`
+	Memo       string          `json:"memo"`
+	Category   ledger.Category `json:"category"`
+	Metadata   meta.Metadata   `json:"metadata,omitempty"`
+	IsReversed bool            `json:"is_reversed"`
+	Lines      []lineResponse  `json:"lines"`
 }
 
 type lineResponse struct {
-    ID          uuid.UUID   `json:"id"`
-    AccountID   uuid.UUID   `json:"account_id"`
-    Side        ledger.Side `json:"side"`
-    AmountMinor int64       `json:"amount_minor"`
-    Amount      string      `json:"amount"`
+	ID          uuid.UUID   `json:"id"`
+	AccountID   uuid.UUID   `json:"account_id"`
+	Side        ledger.Side `json:"side"`
+	AmountMinor int64       `json:"amount_minor"`
+	Amount      string      `json:"amount"`
 }
 
 // listEntriesQuery holds validated query params for GET /entries.
 type listEntriesQuery struct {
-    UserID uuid.UUID
-    Currency string
-    Memo     string
-    Category string
-    IsReversed *bool
+	UserID     uuid.UUID
+	Currency   string
+	Memo       string
+	Category   string
+	IsReversed *bool
 }
 
 // listEntriesResponse wraps entries with cursor for pagination.
 type listEntriesResponse struct {
-    Items      []entryResponse `json:"items"`
-    NextCursor *string         `json:"next_cursor,omitempty"`
+	Items      []entryResponse `json:"items"`
+	NextCursor *string         `json:"next_cursor,omitempty"`
 }
 
 // Reverse entry
 type reverseEntryRequest struct {
-    UserID  uuid.UUID `json:"user_id"`
-    EntryID uuid.UUID `json:"entry_id"`
-    // optional date; if omitted handler sets time.Now()
-    Date    *time.Time `json:"date,omitempty"`
+	UserID  uuid.UUID `json:"user_id"`
+	EntryID uuid.UUID `json:"entry_id"`
+	// optional date; if omitted handler sets time.Now()
+	Date *time.Time `json:"date,omitempty"`
 }
 
 // Trial balance
 type trialBalanceQuery struct {
-    UserID uuid.UUID
-    AsOf   *time.Time
+	UserID uuid.UUID
+	AsOf   *time.Time
 }
 
 type trialBalanceAccount struct {
-    AccountID   uuid.UUID          `json:"account_id"`
-    Name        string             `json:"name"`
-    Path        string             `json:"path"`
-    Currency    string             `json:"currency"`
-    DebitMinor  int64              `json:"debit_minor"`
-    CreditMinor int64              `json:"credit_minor"`
-    Debit       string             `json:"debit"`
-    Credit      string             `json:"credit"`
-    Type        ledger.AccountType `json:"type"`
+	AccountID   uuid.UUID          `json:"account_id"`
+	Name        string             `json:"name"`
+	Path        string             `json:"path"`
+	Currency    string             `json:"currency"`
+	DebitMinor  int64              `json:"debit_minor"`
+	CreditMinor int64              `json:"credit_minor"`
+	Debit       string             `json:"debit"`
+	Credit      string             `json:"credit"`
+	Type        ledger.AccountType `json:"type"`
 }
 
 type trialBalanceCurrencyGroup struct {
-    Currency string                 `json:"currency"`
-    Accounts []trialBalanceAccount  `json:"accounts"`
+	Currency string                `json:"currency"`
+	Accounts []trialBalanceAccount `json:"accounts"`
 }
 
 type trialBalanceResponse struct {
-    UserID uuid.UUID                  `json:"user_id"`
-    AsOf   *time.Time                 `json:"as_of,omitempty"`
-    Groups []trialBalanceCurrencyGroup `json:"groups"`
+	UserID uuid.UUID                   `json:"user_id"`
+	AsOf   *time.Time                  `json:"as_of,omitempty"`
+	Groups []trialBalanceCurrencyGroup `json:"groups"`
 }
 
 // Accounts
 
 type postAccountRequest struct {
-    UserID   uuid.UUID           `json:"user_id"`
-    Name     string              `json:"name"`
-    Currency string              `json:"currency"`
-    Type     ledger.AccountType  `json:"type"`
-    Group    string              `json:"group"`
-    Vendor   string              `json:"vendor"`
-    System   bool                `json:"system,omitempty"`
-    Metadata map[string]string   `json:"metadata,omitempty"`
+	UserID   uuid.UUID          `json:"user_id"`
+	Name     string             `json:"name"`
+	Currency string             `json:"currency"`
+	Type     ledger.AccountType `json:"type"`
+	Group    string             `json:"group"`
+	Vendor   string             `json:"vendor"`
+	System   bool               `json:"system,omitempty"`
+	Metadata map[string]string  `json:"metadata,omitempty"`
 }
 
 type accountResponse struct {
-    ID       uuid.UUID           `json:"id"`
-    UserID   uuid.UUID           `json:"user_id"`
-    Name     string              `json:"name"`
-    Currency string              `json:"currency"`
-    Type     ledger.AccountType  `json:"type"`
-    Group    string              `json:"group"`
-    Vendor   string              `json:"vendor"`
-    Path     string              `json:"path"`
-    Metadata meta.Metadata   `json:"metadata,omitempty"`
-    System   bool                `json:"system"`
-    Active   bool                `json:"active"`
+	ID       uuid.UUID          `json:"id"`
+	UserID   uuid.UUID          `json:"user_id"`
+	Name     string             `json:"name"`
+	Currency string             `json:"currency"`
+	Type     ledger.AccountType `json:"type"`
+	Group    string             `json:"group"`
+	Vendor   string             `json:"vendor"`
+	Path     string             `json:"path"`
+	Metadata meta.Metadata      `json:"metadata,omitempty"`
+	System   bool               `json:"system"`
+	Active   bool               `json:"active"`
 }
 
 type listAccountsQuery struct {
-    UserID uuid.UUID
-    Name   string
-    Currency string
-    Group string
-    Vendor string
-    Type   string
-    System *bool
-    Active *bool
+	UserID   uuid.UUID
+	Name     string
+	Currency string
+	Group    string
+	Vendor   string
+	Type     string
+	System   *bool
+	Active   *bool
 }
