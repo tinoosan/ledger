@@ -15,8 +15,8 @@ import (
 // Repo defines read operations needed by the service.
 type Repo interface {
     AccountsByIDs(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]ledger.Account, error)
-    EntriesByUserID(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
-    EntryByID(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error)
+    ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
+    GetEntry(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error)
 }
 
 // Writer defines write operations needed by the service.
@@ -132,7 +132,7 @@ func (s *service) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.J
     if userID == uuid.Nil {
         return nil, errs.ErrInvalid
     }
-    return s.repo.EntriesByUserID(ctx, userID)
+    return s.repo.ListEntries(ctx, userID)
 }
 
 // ReverseEntry flips all lines of a prior entry and posts a new balancing entry.
@@ -140,7 +140,7 @@ func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, d
     if userID == uuid.Nil || entryID == uuid.Nil {
         return ledger.JournalEntry{}, errs.ErrInvalid
     }
-    orig, err := s.repo.EntryByID(ctx, userID, entryID)
+    orig, err := s.repo.GetEntry(ctx, userID, entryID)
     if err != nil {
         return ledger.JournalEntry{}, err
     }
@@ -174,7 +174,7 @@ func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, dat
     if userID == uuid.Nil || entryID == uuid.Nil {
         return ledger.JournalEntry{}, errs.ErrInvalid
     }
-    orig, err := s.repo.EntryByID(ctx, userID, entryID)
+    orig, err := s.repo.GetEntry(ctx, userID, entryID)
     if err != nil { return ledger.JournalEntry{}, err }
     if orig.UserID != userID { return ledger.JournalEntry{}, errs.ErrForbidden }
 
@@ -202,7 +202,7 @@ func (s *service) TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time
     if userID == uuid.Nil {
         return nil, errors.New("user_id is required")
     }
-    entries, err := s.repo.EntriesByUserID(ctx, userID)
+    entries, err := s.repo.ListEntries(ctx, userID)
     if err != nil { return nil, err }
     out := make(map[uuid.UUID]money.Amount)
     for _, e := range entries {
@@ -229,7 +229,7 @@ func (s *service) TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time
 // AccountBalance returns net amount for a single account up to asOf.
 func (s *service) AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error) {
     if userID == uuid.Nil || accountID == uuid.Nil { return money.MustNewAmount("USD", 0, 0), errors.New("user_id and account_id are required") }
-    entries, err := s.repo.EntriesByUserID(ctx, userID)
+    entries, err := s.repo.ListEntries(ctx, userID)
     if err != nil { return money.MustNewAmount("USD", 0, 0), err }
     // Determine currency from first matching line or default to USD
     var curr string
