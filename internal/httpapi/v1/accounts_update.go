@@ -70,7 +70,7 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
     toJSON(w, http.StatusOK, resp)
 }
 
-// deactivateAccount handles DELETE /accounts/{id} by soft-deactivating via metadata.active=false
+// deactivateAccount handles DELETE /accounts/{id} by soft-deactivating (active=false)
 func (s *Server) deactivateAccount(w http.ResponseWriter, r *http.Request) {
     idStr := chi.URLParam(r, "id")
     id, err := uuid.Parse(idStr)

@@ -36,7 +36,7 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
   - `GET /accounts?user_id=...[&method=&vendor=&type=]` — list (+filters)
   - `POST /accounts` — create
   - `PATCH /accounts/{id}?user_id=...` — update name/method/vendor/metadata
-  - `DELETE /accounts/{id}?user_id=...` — soft delete (metadata.active=false)
+  - `DELETE /accounts/{id}?user_id=...` — soft delete (active=false)
   - `GET /accounts/{id}/balance?user_id=...[&as_of=...]` — signed balance (minor units)
   - `GET /accounts/{id}/ledger?user_id=...[&from=&to=&limit=&cursor=]` — paginated feed with running balance
   - `GET /accounts/opening-balances?user_id=...&currency=...` — returns the currency-matched OpeningBalances account (creates if missing)

@@ -59,7 +59,7 @@ func (s *service) EnsureOpeningBalanceAccount(ctx context.Context, userID uuid.U
         Method:   "OpeningBalances",
         Vendor:   "System",
         System:   true,
-        Metadata: map[string]string{"active": "true"},
+        Active:   true,
     }
     if err := s.ValidateCreate(a); err != nil { return ledger.Account{}, err }
     created, err := s.writer.CreateAccount(ctx, a)
@@ -187,7 +187,7 @@ func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account,
     return s.writer.UpdateAccount(ctx, a)
 }
 
-// Deactivate sets metadata["active"]="false". No-op if system=true.
+// Deactivate sets Active=false (soft delete). No-op if system=true.
 func (s *service) Deactivate(ctx context.Context, userID, accountID uuid.UUID) error {
     if userID == uuid.Nil || accountID == uuid.Nil {
         return errs.ErrInvalid
