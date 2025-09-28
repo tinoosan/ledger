@@ -1,361 +1,439 @@
 package journal
 
 import (
-    "context"
-    "errors"
-    "time"
+	"context"
+	"errors"
+	"time"
 
-    "github.com/google/uuid"
-    "github.com/govalues/money"
+	"github.com/google/uuid"
+	"github.com/govalues/money"
 
-    "github.com/tinoosan/ledger/internal/ledger"
-    "github.com/tinoosan/ledger/internal/errs"
+	"github.com/tinoosan/ledger/internal/errs"
+	"github.com/tinoosan/ledger/internal/ledger"
 )
 
 // Repo defines read operations needed by the service.
 type Repo interface {
-    FetchAccounts(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]ledger.Account, error)
-    ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
-    GetEntry(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error)
+	FetchAccounts(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]ledger.Account, error)
+	ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
+	GetEntry(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error)
 }
 
 // Writer defines write operations needed by the service.
 type Writer interface {
-    CreateJournalEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error)
-    UpdateJournalEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error)
+	CreateJournalEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error)
+	UpdateJournalEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error)
 }
 
 // Service exposes validation and creation of journal entries and reporting helpers.
 type Service interface {
-    ValidateEntry(ctx context.Context, e ledger.JournalEntry) error
-    CreateEntry(ctx context.Context, e ledger.JournalEntry) (ledger.JournalEntry, error)
-    ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
-    ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error)
-    Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine, metadata map[string]string) (ledger.JournalEntry, error)
-    TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error)
-    AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error)
-    CreateEntriesBatch(ctx context.Context, drafts []ledger.JournalEntry) ([]ledger.JournalEntry, []ItemError, error)
+	ValidateEntry(ctx context.Context, e ledger.JournalEntry) error
+	CreateEntry(ctx context.Context, e ledger.JournalEntry) (ledger.JournalEntry, error)
+	ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
+	ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error)
+	Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine, metadata map[string]string) (ledger.JournalEntry, error)
+	TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error)
+	AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error)
+	CreateEntriesBatch(ctx context.Context, drafts []ledger.JournalEntry) ([]ledger.JournalEntry, []ItemError, error)
 }
 
 type service struct {
-    repo   Repo
-    writer Writer
+	repo   Repo
+	writer Writer
 }
 
 func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer: writer} }
 
 // ItemError mirrors account batch; defined here to keep package-level independence.
 type ItemError struct {
-    Index int
-    Code  string
-    Err   error
+	Index int
+	Code  string
+	Err   error
 }
 
 func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) error {
-    if entry.UserID == uuid.Nil {
-        return errs.ErrInvalid
-    }
-    if entry.Currency == "" {
-        return errs.ErrInvalid
-    }
-    if len(entry.Lines.ByID) < 2 {
-        return errs.ErrTooFewLines
-    }
+	if entry.UserID == uuid.Nil {
+		return errs.ErrInvalid
+	}
+	if entry.Currency == "" {
+		return errs.ErrInvalid
+	}
+	if len(entry.Lines.ByID) < 2 {
+		return errs.ErrTooFewLines
+	}
 
-    ids := make([]uuid.UUID, 0, len(entry.Lines.ByID))
-    var sumDebits, sumCredits int64
-    i := 0
-    for _, line := range entry.Lines.ByID {
-        if line.AccountID == uuid.Nil {
-            return fieldErr(i, "account_id required")
-        }
-        units, _ := line.Amount.MinorUnits()
-        if units <= 0 {
-            return errs.ErrInvalidAmount
-        }
-        switch line.Side {
-        case ledger.SideDebit:
-            sumDebits += units
-        case ledger.SideCredit:
-            sumCredits += units
-        default:
-            return fieldErr(i, "side must be debit or credit")
-        }
-        ids = append(ids, line.AccountID)
-        i++
-    }
-    if sumDebits != sumCredits {
-        return errs.ErrUnbalancedEntry
-    }
+	ids := make([]uuid.UUID, 0, len(entry.Lines.ByID))
+	var sumDebits, sumCredits int64
+	i := 0
+	for _, line := range entry.Lines.ByID {
+		if line.AccountID == uuid.Nil {
+			return fieldErr(i, "account_id required")
+		}
+		units, _ := line.Amount.MinorUnits()
+		if units <= 0 {
+			return errs.ErrInvalidAmount
+		}
+		switch line.Side {
+		case ledger.SideDebit:
+			sumDebits += units
+		case ledger.SideCredit:
+			sumCredits += units
+		default:
+			return fieldErr(i, "side must be debit or credit")
+		}
+		ids = append(ids, line.AccountID)
+		i++
+	}
+	if sumDebits != sumCredits {
+		return errs.ErrUnbalancedEntry
+	}
 
-    accMap, err := s.repo.FetchAccounts(ctx, entry.UserID, ids)
-    if err != nil {
-        return err
-    }
-    if len(accMap) != len(unique(ids)) {
-        return errors.New("unknown or unauthorized accounts")
-    }
-    i = 0
-    for _, line := range entry.Lines.ByID {
-        acc, ok := accMap[line.AccountID]
-        if !ok {
-            return fieldErr(i, "account not found for user")
-        }
-        if acc.UserID != entry.UserID {
-            return fieldErr(i, "account does not belong to user")
-        }
-        if acc.Currency != entry.Currency {
-            return errs.ErrMixedCurrency
-        }
-        i++
-    }
-    return nil
+	accMap, err := s.repo.FetchAccounts(ctx, entry.UserID, ids)
+	if err != nil {
+		return err
+	}
+	if len(accMap) != len(unique(ids)) {
+		return errors.New("unknown or unauthorized accounts")
+	}
+	i = 0
+	for _, line := range entry.Lines.ByID {
+		acc, ok := accMap[line.AccountID]
+		if !ok {
+			return fieldErr(i, "account not found for user")
+		}
+		if acc.UserID != entry.UserID {
+			return fieldErr(i, "account does not belong to user")
+		}
+		if acc.Currency != entry.Currency {
+			return errs.ErrMixedCurrency
+		}
+		i++
+	}
+	return nil
 }
 
 // CreateEntriesBatch validates all drafts and, if valid, creates them all.
 // If any item fails validation, no entry is created and per-item errors are returned.
 func (s *service) CreateEntriesBatch(ctx context.Context, drafts []ledger.JournalEntry) ([]ledger.JournalEntry, []ItemError, error) {
-    errsList := make([]ItemError, 0)
-    // validate all
-    for i, d := range drafts {
-        if err := s.ValidateEntry(ctx, d); err != nil {
-            errsList = append(errsList, ItemError{Index: i, Code: codeForErr(err), Err: err})
-        }
-    }
-    if len(errsList) > 0 { return nil, errsList, nil }
-    // create all under transaction if available
-    type txBeginner interface{ BeginTx(context.Context) (interface{ CreateJournalEntry(context.Context, ledger.JournalEntry) (ledger.JournalEntry, error); Commit(context.Context) error; Rollback(context.Context) error }, error) }
-    if b, ok := s.writer.(txBeginner); ok {
-        tx, err := b.BeginTx(ctx)
-        if err != nil { return nil, nil, err }
-        created := make([]ledger.JournalEntry, 0, len(drafts))
-        for _, d := range drafts {
-            e := ledger.JournalEntry{
-                ID:       uuid.New(),
-                UserID:   d.UserID,
-                Date:     d.Date,
-                Currency: d.Currency,
-                Memo:     d.Memo,
-                Category: d.Category,
-                Metadata: d.Metadata,
-                Lines:    d.Lines,
-            }
-            if _, err := tx.CreateJournalEntry(ctx, e); err != nil { _ = tx.Rollback(ctx); return nil, nil, err }
-            created = append(created, e)
-        }
-        if err := tx.Commit(ctx); err != nil { return nil, nil, err }
-        return created, nil, nil
-    }
-    // Fallback (non-tx)
-    created := make([]ledger.JournalEntry, 0, len(drafts))
-    for _, d := range drafts {
-        e, err := s.CreateEntry(ctx, d)
-        if err != nil { return nil, nil, err }
-        created = append(created, e)
-    }
-    return created, nil, nil
+	errsList := make([]ItemError, 0)
+	// validate all
+	for i, d := range drafts {
+		if err := s.ValidateEntry(ctx, d); err != nil {
+			errsList = append(errsList, ItemError{Index: i, Code: codeForErr(err), Err: err})
+		}
+	}
+	if len(errsList) > 0 {
+		return nil, errsList, nil
+	}
+	// create all under transaction if available
+	type txBeginner interface {
+		BeginTx(context.Context) (interface {
+			CreateJournalEntry(context.Context, ledger.JournalEntry) (ledger.JournalEntry, error)
+			Commit(context.Context) error
+			Rollback(context.Context) error
+		}, error)
+	}
+	if b, ok := s.writer.(txBeginner); ok {
+		tx, err := b.BeginTx(ctx)
+		if err != nil {
+			return nil, nil, err
+		}
+		created := make([]ledger.JournalEntry, 0, len(drafts))
+		for _, d := range drafts {
+			e := ledger.JournalEntry{
+				ID:       uuid.New(),
+				UserID:   d.UserID,
+				Date:     d.Date,
+				Currency: d.Currency,
+				Memo:     d.Memo,
+				Category: d.Category,
+				Metadata: d.Metadata,
+				Lines:    d.Lines,
+			}
+			if _, err := tx.CreateJournalEntry(ctx, e); err != nil {
+				_ = tx.Rollback(ctx)
+				return nil, nil, err
+			}
+			created = append(created, e)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return nil, nil, err
+		}
+		return created, nil, nil
+	}
+	// Fallback (non-tx)
+	created := make([]ledger.JournalEntry, 0, len(drafts))
+	for _, d := range drafts {
+		e, err := s.CreateEntry(ctx, d)
+		if err != nil {
+			return nil, nil, err
+		}
+		created = append(created, e)
+	}
+	return created, nil, nil
 }
 
 func codeForErr(err error) string {
-    switch {
-    case errors.Is(err, errs.ErrTooFewLines):
-        return "too_few_lines"
-    case errors.Is(err, errs.ErrInvalidAmount):
-        return "invalid_amount"
-    case errors.Is(err, errs.ErrMixedCurrency):
-        return "currency_mismatch"
-    case errors.Is(err, errs.ErrUnbalancedEntry):
-        return "unbalanced_entry"
-    case errors.Is(err, errs.ErrAlreadyReversed):
-        return "already_reversed"
-    default:
-        return "validation_error"
-    }
+	switch {
+	case errors.Is(err, errs.ErrTooFewLines):
+		return "too_few_lines"
+	case errors.Is(err, errs.ErrInvalidAmount):
+		return "invalid_amount"
+	case errors.Is(err, errs.ErrMixedCurrency):
+		return "currency_mismatch"
+	case errors.Is(err, errs.ErrUnbalancedEntry):
+		return "unbalanced_entry"
+	case errors.Is(err, errs.ErrAlreadyReversed):
+		return "already_reversed"
+	default:
+		return "validation_error"
+	}
 }
 
 func (s *service) CreateEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error) {
-    // Assume ValidateEntry has been called; create and persist atomically.
-    entryID := uuid.New()
-    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(entry.Lines.ByID))}
-    for _, ln := range entry.Lines.ByID {
-        id := uuid.New()
-        nl := *ln
-        nl.ID = id
-        nl.EntryID = entryID
-        lines.ByID[id] = &nl
-    }
+	// Assume ValidateEntry has been called; create and persist atomically.
+	entryID := uuid.New()
+	lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(entry.Lines.ByID))}
+	for _, ln := range entry.Lines.ByID {
+		id := uuid.New()
+		nl := *ln
+		nl.ID = id
+		nl.EntryID = entryID
+		lines.ByID[id] = &nl
+	}
 
-    entry = ledger.JournalEntry{
-        ID:            entryID,
-        UserID:        entry.UserID,
-        Date:          entry.Date,
-        Currency:      entry.Currency,
-        Memo:          entry.Memo,
-        Category:      entry.Category,
-        Metadata:      entry.Metadata,
-        Lines:         lines,
-    }
-    return s.writer.CreateJournalEntry(ctx, entry)
+	entry = ledger.JournalEntry{
+		ID:       entryID,
+		UserID:   entry.UserID,
+		Date:     entry.Date,
+		Currency: entry.Currency,
+		Memo:     entry.Memo,
+		Category: entry.Category,
+		Metadata: entry.Metadata,
+		Lines:    lines,
+	}
+	return s.writer.CreateJournalEntry(ctx, entry)
 }
 
 func (s *service) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error) {
-    if userID == uuid.Nil {
-        return nil, errs.ErrInvalid
-    }
-    return s.repo.ListEntries(ctx, userID)
+	if userID == uuid.Nil {
+		return nil, errs.ErrInvalid
+	}
+	return s.repo.ListEntries(ctx, userID)
 }
 
 // ReverseEntry flips all lines of a prior entry and posts a new balancing entry.
 func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error) {
-    if userID == uuid.Nil || entryID == uuid.Nil {
-        return ledger.JournalEntry{}, errs.ErrInvalid
-    }
-    orig, err := s.repo.GetEntry(ctx, userID, entryID)
-    if err != nil {
-        return ledger.JournalEntry{}, err
-    }
-    if orig.UserID != userID {
-        return ledger.JournalEntry{}, errs.ErrForbidden
-    }
-    if orig.IsReversed {
-        return ledger.JournalEntry{}, errs.ErrAlreadyReversed
-    }
-    rid := uuid.New()
-    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(orig.Lines.ByID))}
-    for _, ln := range orig.Lines.ByID {
-        nl := *ln
-        nl.ID = uuid.New()
-        nl.EntryID = rid
-        if ln.Side == ledger.SideDebit { nl.Side = ledger.SideCredit } else { nl.Side = ledger.SideDebit }
-        lines.ByID[nl.ID] = &nl
-    }
-    e := ledger.JournalEntry{
-        ID:       rid,
-        UserID:   userID,
-        Date:     date,
-        Currency: orig.Currency,
-        Memo:     "reversal of " + orig.ID.String() + ": " + orig.Memo,
-        Category: orig.Category,
-        Lines:    lines,
-    }
-    rev, err := s.writer.CreateJournalEntry(ctx, e)
-    if err != nil { return ledger.JournalEntry{}, err }
-    // Mark original as reversed
-    orig.IsReversed = true
-    if _, err := s.writer.UpdateJournalEntry(ctx, orig); err != nil { return ledger.JournalEntry{}, err }
-    return rev, nil
+	if userID == uuid.Nil || entryID == uuid.Nil {
+		return ledger.JournalEntry{}, errs.ErrInvalid
+	}
+	orig, err := s.repo.GetEntry(ctx, userID, entryID)
+	if err != nil {
+		return ledger.JournalEntry{}, err
+	}
+	if orig.UserID != userID {
+		return ledger.JournalEntry{}, errs.ErrForbidden
+	}
+	if orig.IsReversed {
+		return ledger.JournalEntry{}, errs.ErrAlreadyReversed
+	}
+	rid := uuid.New()
+	lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(orig.Lines.ByID))}
+	for _, ln := range orig.Lines.ByID {
+		nl := *ln
+		nl.ID = uuid.New()
+		nl.EntryID = rid
+		if ln.Side == ledger.SideDebit {
+			nl.Side = ledger.SideCredit
+		} else {
+			nl.Side = ledger.SideDebit
+		}
+		lines.ByID[nl.ID] = &nl
+	}
+	e := ledger.JournalEntry{
+		ID:       rid,
+		UserID:   userID,
+		Date:     date,
+		Currency: orig.Currency,
+		Memo:     "reversal of " + orig.ID.String() + ": " + orig.Memo,
+		Category: orig.Category,
+		Lines:    lines,
+	}
+	rev, err := s.writer.CreateJournalEntry(ctx, e)
+	if err != nil {
+		return ledger.JournalEntry{}, err
+	}
+	// Mark original as reversed
+	orig.IsReversed = true
+	if _, err := s.writer.UpdateJournalEntry(ctx, orig); err != nil {
+		return ledger.JournalEntry{}, err
+	}
+	return rev, nil
 }
 
 // Reclassify posts a reversing entry for the original, then a correcting entry with provided lines.
 // Returns the correcting entry.
 func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine, metadata map[string]string) (ledger.JournalEntry, error) {
-    if userID == uuid.Nil || entryID == uuid.Nil {
-        return ledger.JournalEntry{}, errs.ErrInvalid
-    }
-    orig, err := s.repo.GetEntry(ctx, userID, entryID)
-    if err != nil { return ledger.JournalEntry{}, err }
-    if orig.UserID != userID { return ledger.JournalEntry{}, errs.ErrForbidden }
-    if orig.IsReversed { return ledger.JournalEntry{}, errs.ErrAlreadyReversed }
+	if userID == uuid.Nil || entryID == uuid.Nil {
+		return ledger.JournalEntry{}, errs.ErrInvalid
+	}
+	orig, err := s.repo.GetEntry(ctx, userID, entryID)
+	if err != nil {
+		return ledger.JournalEntry{}, err
+	}
+	if orig.UserID != userID {
+		return ledger.JournalEntry{}, errs.ErrForbidden
+	}
+	if orig.IsReversed {
+		return ledger.JournalEntry{}, errs.ErrAlreadyReversed
+	}
 
-    // 1) reversing entry
-    if _, err := s.ReverseEntry(ctx, userID, entryID, date); err != nil { return ledger.JournalEntry{}, err }
+	// 1) reversing entry
+	if _, err := s.ReverseEntry(ctx, userID, entryID, date); err != nil {
+		return ledger.JournalEntry{}, err
+	}
 
-    // 2) correcting entry
-    if memo == "" { memo = "reclassify of " + orig.ID.String() }
-    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(newLines))}
-    for i := range newLines {
-        ln := newLines[i]
-        id := uuid.New()
-        ln.ID = id
-        ln.EntryID = uuid.Nil
-        lines.ByID[id] = &ln
-    }
-    e := ledger.JournalEntry{UserID: userID, Date: date, Currency: orig.Currency, Memo: memo, Category: category, Metadata: metadata, Lines: lines}
-    if err := s.ValidateEntry(ctx, e); err != nil { return ledger.JournalEntry{}, err }
-    return s.CreateEntry(ctx, e)
+	// 2) correcting entry
+	if memo == "" {
+		memo = "reclassify of " + orig.ID.String()
+	}
+	lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(newLines))}
+	for i := range newLines {
+		ln := newLines[i]
+		id := uuid.New()
+		ln.ID = id
+		ln.EntryID = uuid.Nil
+		lines.ByID[id] = &ln
+	}
+	e := ledger.JournalEntry{UserID: userID, Date: date, Currency: orig.Currency, Memo: memo, Category: category, Metadata: metadata, Lines: lines}
+	if err := s.ValidateEntry(ctx, e); err != nil {
+		return ledger.JournalEntry{}, err
+	}
+	return s.CreateEntry(ctx, e)
 }
 
 // TrialBalance returns net amounts per account (debits - credits) up to asOf (inclusive).
 // TrialBalance returns net amounts (debits - credits) per account up to asOf.
 func (s *service) TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error) {
-    if userID == uuid.Nil {
-        return nil, errors.New("user_id is required")
-    }
-    entries, err := s.repo.ListEntries(ctx, userID)
-    if err != nil { return nil, err }
-    out := make(map[uuid.UUID]money.Amount)
-    for _, e := range entries {
-        if asOf != nil && e.Date.After(*asOf) {
-            continue
-        }
-        for _, ln := range e.Lines.ByID {
-            curr := ln.Amount.Curr().Code()
-            // initialize zero amount for currency if needed
-            if _, ok := out[ln.AccountID]; !ok {
-                out[ln.AccountID], _ = money.NewAmountFromMinorUnits(curr, 0)
-            }
-            switch ln.Side {
-            case ledger.SideDebit:
-                if v, err := out[ln.AccountID].Add(ln.Amount); err == nil { out[ln.AccountID] = v }
-            case ledger.SideCredit:
-                if v, err := out[ln.AccountID].Sub(ln.Amount); err == nil { out[ln.AccountID] = v }
-            }
-        }
-    }
-    return out, nil
+	if userID == uuid.Nil {
+		return nil, errors.New("user_id is required")
+	}
+	entries, err := s.repo.ListEntries(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[uuid.UUID]money.Amount)
+	for _, e := range entries {
+		if asOf != nil && e.Date.After(*asOf) {
+			continue
+		}
+		for _, ln := range e.Lines.ByID {
+			curr := ln.Amount.Curr().Code()
+			// initialize zero amount for currency if needed
+			if _, ok := out[ln.AccountID]; !ok {
+				out[ln.AccountID], _ = money.NewAmountFromMinorUnits(curr, 0)
+			}
+			switch ln.Side {
+			case ledger.SideDebit:
+				if v, err := out[ln.AccountID].Add(ln.Amount); err == nil {
+					out[ln.AccountID] = v
+				}
+			case ledger.SideCredit:
+				if v, err := out[ln.AccountID].Sub(ln.Amount); err == nil {
+					out[ln.AccountID] = v
+				}
+			}
+		}
+	}
+	return out, nil
 }
 
 // AccountBalance returns net amount for a single account up to asOf.
 func (s *service) AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error) {
-    if userID == uuid.Nil || accountID == uuid.Nil { return money.MustNewAmount("USD", 0, 0), errors.New("user_id and account_id are required") }
-    entries, err := s.repo.ListEntries(ctx, userID)
-    if err != nil { return money.MustNewAmount("USD", 0, 0), err }
-    // Determine currency from first matching line or default to USD
-    var curr string
-    for _, e := range entries {
-        if asOf != nil && e.Date.After(*asOf) { continue }
-        for _, ln := range e.Lines.ByID { if ln.AccountID == accountID { curr = ln.Amount.Curr().Code(); break } }
-        if curr != "" { break }
-    }
-    if curr == "" { curr = "USD" }
-    net, _ := money.NewAmountFromMinorUnits(curr, 0)
-    for _, e := range entries {
-        if asOf != nil && e.Date.After(*asOf) { continue }
-        for _, ln := range e.Lines.ByID {
-            if ln.AccountID != accountID { continue }
-            switch ln.Side {
-            case ledger.SideDebit:
-                if v, err := net.Add(ln.Amount); err == nil { net = v }
-            case ledger.SideCredit:
-                if v, err := net.Sub(ln.Amount); err == nil { net = v }
-            }
-        }
-    }
-    return net, nil
+	if userID == uuid.Nil || accountID == uuid.Nil {
+		return money.MustNewAmount("USD", 0, 0), errors.New("user_id and account_id are required")
+	}
+	entries, err := s.repo.ListEntries(ctx, userID)
+	if err != nil {
+		return money.MustNewAmount("USD", 0, 0), err
+	}
+	// Determine currency from first matching line or default to USD
+	var curr string
+	for _, e := range entries {
+		if asOf != nil && e.Date.After(*asOf) {
+			continue
+		}
+		for _, ln := range e.Lines.ByID {
+			if ln.AccountID == accountID {
+				curr = ln.Amount.Curr().Code()
+				break
+			}
+		}
+		if curr != "" {
+			break
+		}
+	}
+	if curr == "" {
+		curr = "USD"
+	}
+	net, _ := money.NewAmountFromMinorUnits(curr, 0)
+	for _, e := range entries {
+		if asOf != nil && e.Date.After(*asOf) {
+			continue
+		}
+		for _, ln := range e.Lines.ByID {
+			if ln.AccountID != accountID {
+				continue
+			}
+			switch ln.Side {
+			case ledger.SideDebit:
+				if v, err := net.Add(ln.Amount); err == nil {
+					net = v
+				}
+			case ledger.SideCredit:
+				if v, err := net.Sub(ln.Amount); err == nil {
+					net = v
+				}
+			}
+		}
+	}
+	return net, nil
 }
 
 func fieldErr(i int, msg string) error { return errors.New("line[" + itoa(i) + "]: " + msg) }
 
 func unique(ids []uuid.UUID) []uuid.UUID {
-    seen := make(map[uuid.UUID]struct{}, len(ids))
-    out := make([]uuid.UUID, 0, len(ids))
-    for _, id := range ids {
-        if _, ok := seen[id]; ok {
-            continue
-        }
-        seen[id] = struct{}{}
-        out = append(out, id)
-    }
-    return out
+	seen := make(map[uuid.UUID]struct{}, len(ids))
+	out := make([]uuid.UUID, 0, len(ids))
+	for _, id := range ids {
+		if _, ok := seen[id]; ok {
+			continue
+		}
+		seen[id] = struct{}{}
+		out = append(out, id)
+	}
+	return out
 }
 
 func itoa(n int) string {
-    if n == 0 { return "0" }
-    neg := false
-    if n < 0 { neg = true; n = -n }
-    var buf [20]byte
-    i := len(buf)
-    for n > 0 { i--; buf[i] = byte('0' + n%10); n /= 10 }
-    if neg { i--; buf[i] = '-' }
-    return string(buf[i:])
+	if n == 0 {
+		return "0"
+	}
+	neg := false
+	if n < 0 {
+		neg = true
+		n = -n
+	}
+	var buf [20]byte
+	i := len(buf)
+	for n > 0 {
+		i--
+		buf[i] = byte('0' + n%10)
+		n /= 10
+	}
+	if neg {
+		i--
+		buf[i] = '-'
+	}
+	return string(buf[i:])
 }
