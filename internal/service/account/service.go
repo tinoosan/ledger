@@ -13,8 +13,8 @@ import (
 )
 
 type Repo interface {
-    AccountsByUserID(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error)
-    AccountByID(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error)
+    ListAccounts(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error)
+    GetAccount(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error)
 }
 
 type Writer interface {
@@ -67,7 +67,7 @@ func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Ac
         return ledger.Account{}, err
     }
     // Ensure unique path per user (case-insensitive on method/vendor)
-    existing, err := s.repo.AccountsByUserID(ctx, account.UserID)
+    existing, err := s.repo.ListAccounts(ctx, account.UserID)
     if err != nil {
         return ledger.Account{}, err
     }
@@ -93,7 +93,7 @@ func (s *service) List(ctx context.Context, userID uuid.UUID) ([]ledger.Account,
     if userID == uuid.Nil {
         return nil, errs.ErrInvalid
     }
-    return s.repo.AccountsByUserID(ctx, userID)
+    return s.repo.ListAccounts(ctx, userID)
 }
 
 // pathKey returns a normalized path Type:method:vendor for uniqueness checks.
@@ -109,7 +109,7 @@ func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account,
     if a.UserID == uuid.Nil || a.ID == uuid.Nil {
         return ledger.Account{}, errs.ErrInvalid
     }
-    current, err := s.repo.AccountByID(ctx, a.UserID, a.ID)
+    current, err := s.repo.GetAccount(ctx, a.UserID, a.ID)
     if err != nil { return ledger.Account{}, err }
     if current.UserID != a.UserID { return ledger.Account{}, errs.ErrForbidden }
     if current.Metadata != nil && strings.EqualFold(current.Metadata["system"], "true") {
@@ -121,7 +121,7 @@ func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account,
     }
     // If method/vendor changed, ensure unique path
     if current.Method != a.Method || current.Vendor != a.Vendor {
-        existing, err := s.repo.AccountsByUserID(ctx, a.UserID)
+        existing, err := s.repo.ListAccounts(ctx, a.UserID)
         if err != nil { return ledger.Account{}, err }
         desired := pathKey(a.Type, a.Method, a.Vendor)
         for _, other := range existing {
@@ -139,7 +139,7 @@ func (s *service) Deactivate(ctx context.Context, userID, accountID uuid.UUID) e
     if userID == uuid.Nil || accountID == uuid.Nil {
         return errs.ErrInvalid
     }
-    acc, err := s.repo.AccountByID(ctx, userID, accountID)
+    acc, err := s.repo.GetAccount(ctx, userID, accountID)
     if err != nil { return err }
     if acc.UserID != userID { return errs.ErrForbidden }
     if acc.Metadata != nil && strings.EqualFold(acc.Metadata["system"], "true") {
