@@ -30,7 +30,7 @@ func (s *Server) getAccountBalance(w http.ResponseWriter, r *http.Request) {
         tt := t.UTC(); asOf = &tt
     }
     // ensure account exists and owned by user
-    if _, err := s.repo.AccountByID(r.Context(), userID, accountID); err != nil {
+    if _, err := s.accReader.AccountByID(r.Context(), userID, accountID); err != nil {
         if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return
     }
@@ -50,7 +50,7 @@ func (s *Server) getAccountLedger(w http.ResponseWriter, r *http.Request) {
     userID, err := uuid.Parse(r.URL.Query().Get("user_id"))
     if err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"}); return }
     // ensure account exists and owned by user
-    if _, err := s.repo.AccountByID(r.Context(), userID, accountID); err != nil {
+    if _, err := s.accReader.AccountByID(r.Context(), userID, accountID); err != nil {
         if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return
     }
@@ -62,7 +62,7 @@ func (s *Server) getAccountLedger(w http.ResponseWriter, r *http.Request) {
     cursor := r.URL.Query().Get("cursor")
 
     // Build a flat list of lines for the account
-    entries, err := s.repo.EntriesByUserID(r.Context(), userID)
+    entries, err := s.entryReader.EntriesByUserID(r.Context(), userID)
     if err != nil { toJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to load entries"}); return }
     type ledgerRecord struct{ date time.Time; entryID, lineID uuid.UUID; side string; amountMinor int64 }
     ledgerRecords := make([]ledgerRecord, 0, 64)

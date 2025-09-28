@@ -28,7 +28,7 @@ func (s *Server) getEntry(w http.ResponseWriter, r *http.Request) {
         toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
         return
     }
-    e, err := s.repo.EntryByID(r.Context(), userID, id)
+    e, err := s.entryReader.EntryByID(r.Context(), userID, id)
     if err != nil {
         if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load entry", "") }
         return

@@ -17,7 +17,9 @@ import (
 type Server struct {
     svc    journal.Service
     accountSvc account.Service
-    repo   Repository
+    accReader AccountReader
+    entryReader EntryReader
+    idemStore IdempotencyStore
     log    *slog.Logger
     rt     *chi.Mux
 }
@@ -30,7 +32,15 @@ func New(repo Repository, writer Writer, logger *slog.Logger) *Server {
     r.Use(requestLogger(logger))
     r.Use(recoverer(logger))
 
-    s := &Server{svc: journal.New(repo, writer), accountSvc: account.New(repo, writer), repo: repo, rt: r, log: logger}
+    s := &Server{
+        svc:        journal.New(repo, writer),
+        accountSvc: account.New(repo, writer),
+        accReader:  repo,
+        entryReader: repo,
+        idemStore:  repo,
+        rt:         r,
+        log:        logger,
+    }
     s.routes()
     return s
 }

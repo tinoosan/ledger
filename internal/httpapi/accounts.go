@@ -85,7 +85,7 @@ func (s *Server) getAccount(w http.ResponseWriter, r *http.Request) {
         toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
         return
     }
-    acc, err := s.repo.AccountByID(r.Context(), userID, id)
+    acc, err := s.accReader.AccountByID(r.Context(), userID, id)
     if err != nil {
         if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return
