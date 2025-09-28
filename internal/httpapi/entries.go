@@ -198,7 +198,6 @@ func toEntryResponse(e ledger.JournalEntry) entryResponse {
         Currency:      e.Currency,
         Memo:          e.Memo,
         Category:      e.Category,
-        ClientEntryID: e.ClientEntryID,
         Lines:         lines,
     }
 }

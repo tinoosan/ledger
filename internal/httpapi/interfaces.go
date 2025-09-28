@@ -17,8 +17,6 @@ type Repository interface {
     AccountsByUserID(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error)
     // EntryByID returns entry by id for the user
     EntryByID(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error)
-    // EntryByClientID resolves entry by client_entry_id for the user.
-    EntryByClientID(ctx context.Context, userID uuid.UUID, clientID string) (ledger.JournalEntry, bool, error)
     AccountByID(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error)
 }
 

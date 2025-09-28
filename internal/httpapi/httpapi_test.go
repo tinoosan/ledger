@@ -26,7 +26,6 @@ type entryResp struct {
     Currency      string         `json:"currency"`
     Memo          string         `json:"memo"`
     Category      string         `json:"category"`
-    ClientEntryID string         `json:"client_entry_id"`
     Lines         []struct {
         ID          string `json:"id"`
         AccountID   string `json:"account_id"`
@@ -74,7 +73,6 @@ func TestPostEntries_ValidAndInvalid(t *testing.T) {
         "currency":       "USD",
         "memo":           "Lunch",
         "category":       "eating_out",
-        "client_entry_id": "c-1",
         "lines": []map[string]any{
             {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 1500},
             {"account_id": income.ID.String(), "side": "credit", "amount_minor": 1500},
@@ -164,7 +162,6 @@ func TestEntries_GetAndIdempotency(t *testing.T) {
         "currency": "USD",
         "memo":     "Test",
         "category": "general",
-        "client_entry_id": "abc-123",
         "lines": []map[string]any{
             {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 700},
             {"account_id": income.ID.String(), "side": "credit", "amount_minor": 700},
@@ -182,12 +179,7 @@ func TestEntries_GetAndIdempotency(t *testing.T) {
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusOK { t.Fatalf("get entry expected 200, got %d", rr.Code) }
 
-    // GET /idempotency/entries/{client_entry_id}
-    r2 := httptest.NewRequest(http.MethodGet, "/idempotency/entries/abc-123?user_id="+userID.String(), nil)
-    rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r2)
-    if rr2.Code != http.StatusOK { t.Fatalf("idempotency expected 200, got %d: %s", rr2.Code, rr2.Body.String()) }
-    var er2 entryResp; _ = json.Unmarshal(rr2.Body.Bytes(), &er2)
-    if er2.ID != er.ID { t.Fatalf("id mismatch: %s vs %s", er2.ID, er.ID) }
+    // idempotency endpoint removed for now
 }
 
 func TestEntries_Validation422(t *testing.T) {

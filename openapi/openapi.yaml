@@ -147,24 +147,6 @@ paths:
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '422': { description: Unprocessable (validation), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
-  /idempotency/entries/{client_entry_id}:
-    get:
-      summary: Resolve entry by client_entry_id
-      operationId: getEntryByClientId
-      tags: [entries]
-      parameters:
-        - in: path
-          name: client_entry_id
-          required: true
-          schema: { type: string }
-        - in: query
-          name: user_id
-          required: true
-          schema: { $ref: '#/components/schemas/UUID' }
-      responses:
-        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
-        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
-        '404': { description: Not found }
 
   /trial-balance:
     get:
@@ -400,7 +382,6 @@ components:
           example: USD
         memo: { type: string }
         category: { $ref: '#/components/schemas/Category' }
-        client_entry_id: { type: string }
         lines:
           type: array
           minItems: 2
@@ -415,7 +396,6 @@ components:
         currency: { type: string }
         memo: { type: string }
         category: { $ref: '#/components/schemas/Category' }
-        client_entry_id: { type: string }
         lines:
           type: array
           items: { $ref: '#/components/schemas/JournalLineResponse' }
@@ -528,3 +508,10 @@ components:
       properties:
         error: { type: string }
         code: { type: string }
+      examples:
+        system_account:
+          summary: System account mutation
+          value: { error: system_account, code: system_account }
+        immutable:
+          summary: Attempt to change immutable field(s)
+          value: { error: immutable, code: immutable }

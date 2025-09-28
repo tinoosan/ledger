@@ -104,15 +104,7 @@ func (s *Store) EntryByID(_ context.Context, userID, entryID uuid.UUID) (ledger.
 }
 
 // EntryByClientID resolves entry via client entry id.
-func (s *Store) EntryByClientID(_ context.Context, userID uuid.UUID, clientID string) (ledger.JournalEntry, bool, error) {
-    s.mu.RLock(); defer s.mu.RUnlock()
-    for _, e := range s.entries {
-        if e.UserID == userID && e.ClientEntryID == clientID {
-            return *e, true, nil
-        }
-    }
-    return ledger.JournalEntry{}, false, nil
-}
+// EntryByClientID removed (client idempotency not supported currently)
 
 // AccountsByUserID returns accounts for a user.
 func (s *Store) AccountsByUserID(_ context.Context, userID uuid.UUID) ([]ledger.Account, error) {

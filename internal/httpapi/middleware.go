@@ -195,7 +195,6 @@ func toEntryDomain(req postEntryRequest) ledger.JournalEntry {
         Currency:      req.Currency,
         Memo:          req.Memo,
         Category:      req.Category,
-        ClientEntryID: req.ClientEntryID,
         Lines:         lines,
     }
 }

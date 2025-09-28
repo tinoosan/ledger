@@ -58,8 +58,7 @@ func (s *Server) routes() {
     s.rt.Get("/accounts/{id}/ledger", s.getAccountLedger)
     s.rt.Patch("/accounts/{id}", s.updateAccount)
     s.rt.Delete("/accounts/{id}", s.deactivateAccount)
-    // Idempotency
-    s.rt.Get("/idempotency/entries/{client_entry_id}", s.getEntryByClientID)
+    // Idempotency (removed for now)
     // Health
     s.rt.Get("/healthz", s.healthz)
     s.rt.Get("/readyz", s.readyz)
