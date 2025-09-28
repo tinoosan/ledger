@@ -74,4 +74,5 @@ func (s *Server) routes() {
     s.rt.Get("/readyz", s.readyz)
     // OpenAPI spec (dev convenience)
     s.rt.Get("/openapi.yaml", s.openapiSpec)
+    s.rt.Get("/v1/openapi.yaml", s.openapiSpec)
 }
