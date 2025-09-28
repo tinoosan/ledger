@@ -36,7 +36,7 @@ func (s *Server) getAccountBalance(w http.ResponseWriter, r *http.Request) {
     if err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()}); return }
     units, _ := bal.MinorUnits()
     curr := bal.Curr().Code()
-    resp := map[string]any{"user_id": userID, "account_id": id, "as_of": asOf, "currency": curr, "balance_minor": units}
+    resp := map[string]any{"user_id": userID, "account_id": id, "as_of": asOf, "currency": curr, "balance_minor": units, "balance": bal.Decimal().String()}
     toJSON(w, http.StatusOK, resp)
 }
 
@@ -122,12 +122,13 @@ func (s *Server) getAccountLedger(w http.ResponseWriter, r *http.Request) {
     items := list[start:end]
 
     // Build response with running balance
-    type item struct { Date time.Time `json:"date"`; EntryID uuid.UUID `json:"entry_id"`; LineID uuid.UUID `json:"line_id"`; Side string `json:"side"`; AmountMinor int64 `json:"amount_minor"`; RunningMinor int64 `json:"running_balance_minor"` }
+    type item struct { Date time.Time `json:"date"`; EntryID uuid.UUID `json:"entry_id"`; LineID uuid.UUID `json:"line_id"`; Side string `json:"side"`; AmountMinor int64 `json:"amount_minor"`; Amount string `json:"amount"`; RunningMinor int64 `json:"running_balance_minor"`; Running string `json:"running_balance"` }
     resp := struct { UserID uuid.UUID `json:"user_id"`; AccountID uuid.UUID `json:"account_id"`; Currency string `json:"currency"`; Items []item `json:"items"`; NextCursor *string `json:"next_cursor,omitempty"` }{UserID: userID, AccountID: id, Currency: curr}
     for _, rc := range items {
-        if rc.side == "debit" { bal, _ = bal.Add(mustAmount(curr, rc.amount)) } else { bal, _ = bal.Sub(mustAmount(curr, rc.amount)) }
+        amt := mustAmount(curr, rc.amount)
+        if rc.side == "debit" { bal, _ = bal.Add(amt) } else { bal, _ = bal.Sub(amt) }
         run, _ := bal.MinorUnits()
-        resp.Items = append(resp.Items, item{Date: rc.date, EntryID: rc.entryID, LineID: rc.lineID, Side: rc.side, AmountMinor: rc.amount, RunningMinor: run})
+        resp.Items = append(resp.Items, item{Date: rc.date, EntryID: rc.entryID, LineID: rc.lineID, Side: rc.side, AmountMinor: rc.amount, Amount: amt.Decimal().String(), RunningMinor: run, Running: bal.Decimal().String()})
     }
     if end < len(list) {
         c := base64.StdEncoding.EncodeToString([]byte(items[len(items)-1].date.Format(time.RFC3339Nano) + "|" + items[len(items)-1].lineID.String()))

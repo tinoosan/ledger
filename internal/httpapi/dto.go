@@ -44,6 +44,7 @@ type lineResponse struct {
     AccountID   uuid.UUID   `json:"account_id"`
     Side        ledger.Side `json:"side"`
     AmountMinor int64       `json:"amount_minor"`
+    Amount      string      `json:"amount"`
 }
 
 // listEntriesQuery holds validated query params for GET /entries.
@@ -78,6 +79,8 @@ type trialBalanceAccount struct {
     Currency    string             `json:"currency"`
     DebitMinor  int64              `json:"debit_minor"`
     CreditMinor int64              `json:"credit_minor"`
+    Debit       string             `json:"debit"`
+    Credit      string             `json:"credit"`
     Type        ledger.AccountType `json:"type"`
 }
 

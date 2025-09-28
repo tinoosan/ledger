@@ -381,6 +381,9 @@ components:
           required: [id]
           properties:
             id: { $ref: '#/components/schemas/UUID' }
+            amount:
+              type: string
+              description: Decimal amount in major units
 
     JournalEntryRequest:
       type: object
@@ -464,6 +467,9 @@ components:
         as_of: { type: string, format: date-time }
         currency: { type: string }
         balance_minor: { type: integer, format: int64 }
+        balance:
+          type: string
+          description: Decimal balance in major units
 
     AccountLedgerItem:
       type: object
@@ -473,7 +479,13 @@ components:
         line_id: { $ref: '#/components/schemas/UUID' }
         side: { $ref: '#/components/schemas/Side' }
         amount_minor: { type: integer, format: int64 }
+        amount:
+          type: string
+          description: Decimal amount in major units
         running_balance_minor: { type: integer, format: int64 }
+        running_balance:
+          type: string
+          description: Decimal running balance in major units
     AccountLedgerResponse:
       type: object
       properties:
@@ -495,6 +507,12 @@ components:
         type: { $ref: '#/components/schemas/AccountType' }
         debit_minor: { type: integer, format: int64 }
         credit_minor: { type: integer, format: int64 }
+        debit:
+          type: string
+          description: Decimal debit amount in major units
+        credit:
+          type: string
+          description: Decimal credit amount in major units
     TrialBalanceResponse:
       type: object
       properties:

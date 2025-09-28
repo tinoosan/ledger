@@ -11,6 +11,7 @@ import (
 
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/govalues/money"
 )
 
 func (s *Server) postEntry(w http.ResponseWriter, r *http.Request) {
@@ -83,6 +84,18 @@ func (s *Server) trialBalance(w http.ResponseWriter, r *http.Request) {
         units, _ := amt.MinorUnits()
         var debit, credit int64
         if units >= 0 { debit, credit = units, 0 } else { debit, credit = 0, -units }
+        // decimals using money.Amount.Decimal()
+        dstr, cstr := "0", "0"
+        if debit > 0 {
+            if a, err := money.NewAmountFromMinorUnits(acc.Currency, debit); err == nil {
+                dstr = a.Decimal().String()
+            }
+        }
+        if credit > 0 {
+            if a, err := money.NewAmountFromMinorUnits(acc.Currency, credit); err == nil {
+                cstr = a.Decimal().String()
+            }
+        }
         resp.Accounts = append(resp.Accounts, trialBalanceAccount{
             AccountID: id,
             Name: acc.Name,
@@ -90,6 +103,8 @@ func (s *Server) trialBalance(w http.ResponseWriter, r *http.Request) {
             Currency: acc.Currency,
             DebitMinor: debit,
             CreditMinor: credit,
+            Debit: dstr,
+            Credit: cstr,
             Type: acc.Type,
         })
     }
@@ -173,6 +188,7 @@ func toEntryResponse(e ledger.JournalEntry) entryResponse {
             AccountID:   ln.AccountID,
             Side:        ln.Side,
             AmountMinor: units,
+            Amount:      ln.Amount.Decimal().String(),
         })
     }
     return entryResponse{
