@@ -14,43 +14,43 @@ import (
 )
 
 func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
-    v := r.Context().Value(ctxKeyPostAccount)
-    in, ok := v.(ledger.Account)
+    ctxVal := r.Context().Value(ctxKeyPostAccount)
+    accountInput, ok := ctxVal.(ledger.Account)
     if !ok {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "validated request missing"})
         return
     }
-    acc, err := s.accountSvc.Create(r.Context(), in)
+    createdAccount, err := s.accountSvc.Create(r.Context(), accountInput)
     if err != nil {
         if errors.Is(err, account.ErrPathExists) { conflict(w, err.Error()); return }
         if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid"); return }
         writeErr(w, http.StatusInternalServerError, "could not create account", "")
         return
     }
-    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata}
+    resp := accountResponse{ID: createdAccount.ID, UserID: createdAccount.UserID, Name: createdAccount.Name, Currency: createdAccount.Currency, Type: createdAccount.Type, Method: createdAccount.Method, Vendor: createdAccount.Vendor, Path: createdAccount.Path(), Metadata: createdAccount.Metadata}
     toJSON(w, http.StatusCreated, resp)
 }
 
 func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
-    v := r.Context().Value(ctxKeyListAccounts)
-    q, ok := v.(listAccountsQuery)
+    ctxVal := r.Context().Value(ctxKeyListAccounts)
+    query, ok := ctxVal.(listAccountsQuery)
     if !ok {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "validated query missing"})
         return
     }
-    accs, err := s.accountSvc.List(r.Context(), q.UserID)
+    accounts, err := s.accountSvc.List(r.Context(), query.UserID)
     if err != nil {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "could not fetch accounts"})
         return
     }
-    out := make([]accountResponse, 0, len(accs))
-    for _, a := range accs {
-        if q.Method != "" && !equalsFold(a.Method, q.Method) { continue }
-        if q.Vendor != "" && !equalsFold(a.Vendor, q.Vendor) { continue }
-        if q.Type   != "" && !equalsFold(string(a.Type), q.Type) { continue }
-        out = append(out, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Method: a.Method, Vendor: a.Vendor, Path: a.Path(), Metadata: a.Metadata})
+    responses := make([]accountResponse, 0, len(accounts))
+    for _, account := range accounts {
+        if query.Method != "" && !equalsFold(account.Method, query.Method) { continue }
+        if query.Vendor != "" && !equalsFold(account.Vendor, query.Vendor) { continue }
+        if query.Type   != "" && !equalsFold(string(account.Type), query.Type) { continue }
+        responses = append(responses, accountResponse{ID: account.ID, UserID: account.UserID, Name: account.Name, Currency: account.Currency, Type: account.Type, Method: account.Method, Vendor: account.Vendor, Path: account.Path(), Metadata: account.Metadata})
     }
-    toJSON(w, http.StatusOK, out)
+    toJSON(w, http.StatusOK, responses)
 }
 
 func equalsFold(a, b string) bool {

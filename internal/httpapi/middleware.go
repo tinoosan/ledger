@@ -58,12 +58,12 @@ func (s *Server) validateListEntries() func(http.Handler) http.Handler {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
                 return
             }
-            uid, err := uuid.Parse(raw)
+            userID, err := uuid.Parse(raw)
             if err != nil {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
                 return
             }
-            ctx := context.WithValue(r.Context(), ctxKeyListEntries, listEntriesQuery{UserID: uid})
+            ctx := context.WithValue(r.Context(), ctxKeyListEntries, listEntriesQuery{UserID: userID})
             next.ServeHTTP(w, r.WithContext(ctx))
         })
     }
@@ -100,7 +100,7 @@ func (s *Server) validateTrialBalance() func(http.Handler) http.Handler {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
                 return
             }
-            uid, err := uuid.Parse(userStr)
+            userID, err := uuid.Parse(userStr)
             if err != nil {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
                 return
@@ -115,7 +115,7 @@ func (s *Server) validateTrialBalance() func(http.Handler) http.Handler {
                     return
                 }
             }
-            ctx := context.WithValue(r.Context(), ctxKeyTrialBalance, trialBalanceQuery{UserID: uid, AsOf: asOf})
+            ctx := context.WithValue(r.Context(), ctxKeyTrialBalance, trialBalanceQuery{UserID: userID, AsOf: asOf})
             next.ServeHTTP(w, r.WithContext(ctx))
         })
     }
@@ -152,16 +152,16 @@ func (s *Server) validateListAccounts() func(http.Handler) http.Handler {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
                 return
             }
-            uid, err := uuid.Parse(raw)
+            userID, err := uuid.Parse(raw)
             if err != nil {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
                 return
             }
-            q := listAccountsQuery{UserID: uid}
-            if m := r.URL.Query().Get("method"); m != "" { q.Method = m }
-            if v := r.URL.Query().Get("vendor"); v != "" { q.Vendor = v }
-            if t := r.URL.Query().Get("type"); t != "" { q.Type = t }
-            ctx := context.WithValue(r.Context(), ctxKeyListAccounts, q)
+            query := listAccountsQuery{UserID: userID}
+            if m := r.URL.Query().Get("method"); m != "" { query.Method = m }
+            if v := r.URL.Query().Get("vendor"); v != "" { query.Vendor = v }
+            if t := r.URL.Query().Get("type"); t != "" { query.Type = t }
+            ctx := context.WithValue(r.Context(), ctxKeyListAccounts, query)
             next.ServeHTTP(w, r.WithContext(ctx))
         })
     }
@@ -184,10 +184,10 @@ func toAccountDomain(req postAccountRequest) ledger.Account {
 func toEntryDomain(req postEntryRequest) ledger.JournalEntry {
     // Construct domain JournalEntry with money.Amount lines
     lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(req.Lines))}
-    for _, ln := range req.Lines {
-        amt, _ := money.NewAmountFromMinorUnits(req.Currency, ln.AmountMinor)
+    for _, line := range req.Lines {
+        amt, _ := money.NewAmountFromMinorUnits(req.Currency, line.AmountMinor)
         id := uuid.New()
-        lines.ByID[id] = &ledger.JournalLine{ID: id, AccountID: ln.AccountID, Side: ln.Side, Amount: amt}
+        lines.ByID[id] = &ledger.JournalLine{ID: id, AccountID: line.AccountID, Side: line.Side, Amount: amt}
     }
     return ledger.JournalEntry{
         UserID:        req.UserID,

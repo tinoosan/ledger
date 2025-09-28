@@ -37,23 +37,23 @@ type service struct {
 
 func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer: writer} }
 
-func (s *service) ValidateCreate(in ledger.Account) error {
-    if in.UserID == uuid.Nil {
+func (s *service) ValidateCreate(account ledger.Account) error {
+    if account.UserID == uuid.Nil {
         return errs.ErrInvalid
     }
-    if in.Name == "" {
+    if account.Name == "" {
         return errors.New("name is required")
     }
-    if in.Currency == "" {
+    if account.Currency == "" {
         return errors.New("currency is required")
     }
-    if in.Method == "" {
+    if account.Method == "" {
         return errors.New("method is required")
     }
-    if in.Vendor == "" {
+    if account.Vendor == "" {
         return errors.New("vendor is required")
     }
-    switch in.Type {
+    switch account.Type {
     case ledger.AccountTypeAsset, ledger.AccountTypeLiability, ledger.AccountTypeEquity, ledger.AccountTypeRevenue, ledger.AccountTypeExpense:
         // ok
     default:
@@ -62,29 +62,29 @@ func (s *service) ValidateCreate(in ledger.Account) error {
     return nil
 }
 
-func (s *service) Create(ctx context.Context, in ledger.Account) (ledger.Account, error) {
-    if err := s.ValidateCreate(in); err != nil {
+func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Account, error) {
+    if err := s.ValidateCreate(account); err != nil {
         return ledger.Account{}, err
     }
     // Ensure unique path per user (case-insensitive on method/vendor)
-    existing, err := s.repo.AccountsByUserID(ctx, in.UserID)
+    existing, err := s.repo.AccountsByUserID(ctx, account.UserID)
     if err != nil {
         return ledger.Account{}, err
     }
-    desired := pathKey(in.Type, in.Method, in.Vendor)
+    desired := pathKey(account.Type, account.Method, account.Vendor)
     for _, a := range existing {
-        if a.UserID == in.UserID && pathKey(a.Type, a.Method, a.Vendor) == desired {
+        if a.UserID == account.UserID && pathKey(a.Type, a.Method, a.Vendor) == desired {
             return ledger.Account{}, ErrPathExists
         }
     }
     acc := ledger.Account{
         ID:       uuid.New(),
-        UserID:   in.UserID,
-        Name:     in.Name,
-        Currency: in.Currency,
-        Type:     in.Type,
-        Method:   in.Method,
-        Vendor:   in.Vendor,
+        UserID:   account.UserID,
+        Name:     account.Name,
+        Currency: account.Currency,
+        Type:     account.Type,
+        Method:   account.Method,
+        Vendor:   account.Vendor,
     }
     return s.writer.CreateAccount(ctx, acc)
 }

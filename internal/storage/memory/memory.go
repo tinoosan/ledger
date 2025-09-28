@@ -145,51 +145,51 @@ func (s *Store) UpdateAccount(_ context.Context, a ledger.Account) (ledger.Accou
 // insertEntryIndexLocked inserts k into the per-user sorted index, keeping order asc by (Date, ID).
 // Caller must hold s.mu (write lock).
 func (s *Store) insertEntryIndexLocked(userID uuid.UUID, k entryKey) {
-    arr := s.entryKeysByUser[userID]
+    keys := s.entryKeysByUser[userID]
     // binary search for first position > k (stable insert after equal)
-    i := sort.Search(len(arr), func(i int) bool {
-        if arr[i].Date.After(k.Date) { return true }
-        if arr[i].Date.Equal(k.Date) { return arr[i].ID.String() > k.ID.String() }
+    i := sort.Search(len(keys), func(i int) bool {
+        if keys[i].Date.After(k.Date) { return true }
+        if keys[i].Date.Equal(k.Date) { return keys[i].ID.String() > k.ID.String() }
         return false
     })
     // insert at i
-    if i == len(arr) {
-        s.entryKeysByUser[userID] = append(arr, k)
+    if i == len(keys) {
+        s.entryKeysByUser[userID] = append(keys, k)
         return
     }
-    arr = append(arr, entryKey{})
-    copy(arr[i+1:], arr[i:])
-    arr[i] = k
-    s.entryKeysByUser[userID] = arr
+    keys = append(keys, entryKey{})
+    copy(keys[i+1:], keys[i:])
+    keys[i] = k
+    s.entryKeysByUser[userID] = keys
 }
 
 // rangeByTime returns a copy of keys within [from,to] inclusive for a user.
 func (s *Store) rangeByTime(userID uuid.UUID, from, to *time.Time) []entryKey {
     s.mu.RLock(); defer s.mu.RUnlock()
-    arr := s.entryKeysByUser[userID]
-    if len(arr) == 0 { return nil }
+    keys := s.entryKeysByUser[userID]
+    if len(keys) == 0 { return nil }
     // find start
     start := 0
     if from != nil {
         f := *from
-        start = sort.Search(len(arr), func(i int) bool {
-            if arr[i].Date.After(f) || arr[i].Date.Equal(f) { return true }
+        start = sort.Search(len(keys), func(i int) bool {
+            if keys[i].Date.After(f) || keys[i].Date.Equal(f) { return true }
             return false
         })
     }
     // find end (exclusive)
-    end := len(arr)
+    end := len(keys)
     if to != nil {
         t := *to
-        end = sort.Search(len(arr), func(i int) bool {
-            if arr[i].Date.After(t) { return true }
+        end = sort.Search(len(keys), func(i int) bool {
+            if keys[i].Date.After(t) { return true }
             return false
         })
     }
     if start < 0 { start = 0 }
-    if end > len(arr) { end = len(arr) }
+    if end > len(keys) { end = len(keys) }
     if start > end { return nil }
-    out := make([]entryKey, end-start)
-    copy(out, arr[start:end])
-    return out
+    subset := make([]entryKey, end-start)
+    copy(subset, keys[start:end])
+    return subset
 }

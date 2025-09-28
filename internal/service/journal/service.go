@@ -42,29 +42,29 @@ type service struct {
 
 func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer: writer} }
 
-func (s *service) ValidateEntry(ctx context.Context, e ledger.JournalEntry) error {
-    if e.UserID == uuid.Nil {
+func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) error {
+    if entry.UserID == uuid.Nil {
         return errs.ErrInvalid
     }
-    if e.Currency == "" {
+    if entry.Currency == "" {
         return errs.ErrInvalid
     }
-    if len(e.Lines.ByID) < 2 {
+    if len(entry.Lines.ByID) < 2 {
         return errors.New("at least 2 lines")
     }
 
-    ids := make([]uuid.UUID, 0, len(e.Lines.ByID))
+    ids := make([]uuid.UUID, 0, len(entry.Lines.ByID))
     var sumDebits, sumCredits int64
     i := 0
-    for _, ln := range e.Lines.ByID {
-        if ln.AccountID == uuid.Nil {
+    for _, line := range entry.Lines.ByID {
+        if line.AccountID == uuid.Nil {
             return fieldErr(i, "account_id required")
         }
-        units, _ := ln.Amount.MinorUnits()
+        units, _ := line.Amount.MinorUnits()
         if units <= 0 {
             return fieldErr(i, "amount must be > 0")
         }
-        switch ln.Side {
+        switch line.Side {
         case ledger.SideDebit:
             sumDebits += units
         case ledger.SideCredit:
@@ -72,14 +72,14 @@ func (s *service) ValidateEntry(ctx context.Context, e ledger.JournalEntry) erro
         default:
             return fieldErr(i, "side must be debit or credit")
         }
-        ids = append(ids, ln.AccountID)
+        ids = append(ids, line.AccountID)
         i++
     }
     if sumDebits != sumCredits {
         return errors.New("sum(debits) must equal sum(credits)")
     }
 
-    accMap, err := s.repo.AccountsByIDs(ctx, e.UserID, ids)
+    accMap, err := s.repo.AccountsByIDs(ctx, entry.UserID, ids)
     if err != nil {
         return err
     }
@@ -87,15 +87,15 @@ func (s *service) ValidateEntry(ctx context.Context, e ledger.JournalEntry) erro
         return errors.New("unknown or unauthorized accounts")
     }
     i = 0
-    for _, ln := range e.Lines.ByID {
-        acc, ok := accMap[ln.AccountID]
+    for _, line := range entry.Lines.ByID {
+        acc, ok := accMap[line.AccountID]
         if !ok {
             return fieldErr(i, "account not found for user")
         }
-        if acc.UserID != e.UserID {
+        if acc.UserID != entry.UserID {
             return fieldErr(i, "account does not belong to user")
         }
-        if acc.Currency != e.Currency {
+        if acc.Currency != entry.Currency {
             return fieldErr(i, "account currency mismatch")
         }
         i++
@@ -103,11 +103,11 @@ func (s *service) ValidateEntry(ctx context.Context, e ledger.JournalEntry) erro
     return nil
 }
 
-func (s *service) CreateEntry(ctx context.Context, e ledger.JournalEntry) (ledger.JournalEntry, error) {
+func (s *service) CreateEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error) {
     // Assume ValidateEntry has been called; create and persist atomically.
     entryID := uuid.New()
-    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(e.Lines.ByID))}
-    for _, ln := range e.Lines.ByID {
+    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(entry.Lines.ByID))}
+    for _, ln := range entry.Lines.ByID {
         id := uuid.New()
         nl := *ln
         nl.ID = id
@@ -115,14 +115,13 @@ func (s *service) CreateEntry(ctx context.Context, e ledger.JournalEntry) (ledge
         lines.ByID[id] = &nl
     }
 
-    entry := ledger.JournalEntry{
+    entry = ledger.JournalEntry{
         ID:            entryID,
-        UserID:        e.UserID,
-        Date:          e.Date,
-        Currency:      e.Currency,
-        Memo:          e.Memo,
-        Category:      e.Category,
-        ClientEntryID: e.ClientEntryID,
+        UserID:        entry.UserID,
+        Date:          entry.Date,
+        Currency:      entry.Currency,
+        Memo:          entry.Memo,
+        Category:      entry.Category,
         Lines:         lines,
     }
     return s.writer.CreateJournalEntry(ctx, entry)
