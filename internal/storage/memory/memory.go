@@ -300,32 +300,4 @@ func (s *Store) insertEntryIndexLocked(userID uuid.UUID, k entryKey) {
 }
 
 // rangeByTime returns a copy of keys within [from,to] inclusive for a user.
-func (s *Store) rangeByTime(userID uuid.UUID, from, to *time.Time) []entryKey {
-    s.mu.RLock(); defer s.mu.RUnlock()
-    keys := s.entryKeysByUser[userID]
-    if len(keys) == 0 { return nil }
-    // find start
-    start := 0
-    if from != nil {
-        f := *from
-        start = sort.Search(len(keys), func(i int) bool {
-            if keys[i].Date.After(f) || keys[i].Date.Equal(f) { return true }
-            return false
-        })
-    }
-    // find end (exclusive)
-    end := len(keys)
-    if to != nil {
-        t := *to
-        end = sort.Search(len(keys), func(i int) bool {
-            if keys[i].Date.After(t) { return true }
-            return false
-        })
-    }
-    if start < 0 { start = 0 }
-    if end > len(keys) { end = len(keys) }
-    if start > end { return nil }
-    subset := make([]entryKey, end-start)
-    copy(subset, keys[start:end])
-    return subset
-}
+// rangeByTime removed as unused; index operations are handled inline where needed.
