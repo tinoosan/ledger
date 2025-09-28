@@ -1,12 +1,13 @@
 package postgres
 
 import (
-	"context"
-	"io/ioutil"
-	"os"
-	"path/filepath"
-	"testing"
-	"time"
+    "context"
+    "io/ioutil"
+    "os"
+    "path/filepath"
+    "runtime"
+    "testing"
+    "time"
 
 	"github.com/google/uuid"
 	"github.com/govalues/money"
@@ -42,7 +43,10 @@ func applyInitSQL(t *testing.T, dsn string) {
 		t.Fatalf("open for init: %v", err)
 	}
 	defer s.Close()
-	path := filepath.Join("db", "migrations", "0001_init.sql")
+    // Resolve init SQL path relative to this test file so CWD doesn't matter
+    _, thisFile, _, _ := runtime.Caller(0)
+    repoRoot := filepath.Clean(filepath.Join(filepath.Dir(thisFile), "../../../"))
+    path := filepath.Join(repoRoot, "db", "migrations", "0001_init.sql")
 	b, err := ioutil.ReadFile(path)
 	if err != nil {
 		t.Fatalf("read init sql: %v", err)
