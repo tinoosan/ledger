@@ -207,6 +207,22 @@ curl -sS "http://localhost:8080/v1/accounts/opening-balances?user_id=<user_id>&c
   - `make compose-logs` → follow logs
   - `make compose-down` → stop and remove volumes
 
+### Dev Seed Banner
+
+On startup in dev, the service prints a banner with IDs for quick testing:
+
+```
+==================== DEV SEED ====================
+user_id: <uuid>
+opening_balances_account_id: <uuid>
+cash_account_id: <uuid>
+income_account_id: <uuid>
+==================================================
+```
+
+- Memory backend always seeds.
+- Postgres backend seeds when `DEV_SEED=true` (enabled in docker-compose).
+
 ---
 
 This service is intentionally small and explicit. If something feels unclear, it likely wants a comment right above it—PRs welcome.
@@ -266,3 +282,49 @@ curl -sS -X POST http://localhost:8080/v1/entries/batch \
 
 Wiring example (later):
 - Detect `DATABASE_URL`; if set, initialize `postgres.Open(ctx, dsn)` and pass it anywhere `store` is used today. Keep memory as the default for dev.
+
+## Environment Variables
+
+- `DATABASE_URL`: if set, use Postgres store. Example: `postgresql://user:pass@host:5432/db?sslmode=disable`
+- `DEV_SEED`: `true|1|yes` to insert a dev user and a few accounts (Postgres mode). Always enabled for memory mode.
+- `LOG_FORMAT`: `json` (default) or `text`
+- `LOG_LEVEL`: `DEBUG | INFO | WARNING | ERROR`
+
+## Idempotency (How To Test)
+
+- Single entry (`POST /v1/entries`): optional `Idempotency-Key`; if present, persisted in Postgres (`entry_idempotency`).
+- Batch endpoints (`/v1/accounts/batch`, `/v1/entries/batch`): require `Idempotency-Key`; request-level idempotency uses a normalized body hash and an in-memory cache.
+
+Tips
+- Reuse the same key only if the body is exactly identical (including dates and order).
+- When iterating, prefer a fresh key or compute the key from the request body.
+
+Postman pre-request script (deterministic key)
+
+```
+const raw = pm.request.body && pm.request.body.mode === 'raw' ? pm.request.body.raw : '';
+const hash = CryptoJS.SHA256(raw).toString(CryptoJS.enc.Hex);
+pm.variables.set('IDEMPOTENCY_KEY', hash);
+```
+
+Then set header: `Idempotency-Key: {{IDEMPOTENCY_KEY}}`.
+
+CLI example (compute key from body)
+
+```
+KEY=$(jq -S -c . < payload.json | shasum -a 256 | cut -d' ' -f1)
+curl -sS -X POST http://localhost:8080/v1/accounts/batch \
+  -H 'Content-Type: application/json' \
+  -H "Idempotency-Key: $KEY" \
+  --data @payload.json
+```
+
+## Local Containers (Compose)
+
+- Start: `make compose-up`
+- Logs: `make compose-logs` (shows the dev seed banner with IDs)
+- Stop: `make compose-down`
+
+The DB auto-initializes using `db/migrations/0001_init.sql` on first run.
+
+Release planning and pre-v0.1.0 tasks are tracked as GitHub issues.
