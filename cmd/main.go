@@ -2,6 +2,7 @@ package main
 
 import (
     "context"
+    "fmt"
     "net/http"
     "os"
     "os/signal"
@@ -41,19 +42,8 @@ func main() {
             if err != nil {
                 logger.Error("dev seed failed", "err", err)
             } else {
-                // log main IDs for quick testing
-                ids := map[string]string{}
-                for _, a := range accs {
-                    switch {
-                    case a.System && strings.EqualFold(a.Group, "opening_balances"):
-                        ids["opening_balances_account_id"] = a.ID.String()
-                    case a.Type == ledger.AccountTypeAsset && strings.EqualFold(a.Group, "cash"):
-                        ids["cash_account_id"] = a.ID.String()
-                    case a.Type == ledger.AccountTypeRevenue && strings.EqualFold(a.Group, "salary"):
-                        ids["income_account_id"] = a.ID.String()
-                    }
-                }
-                logger.Info("DEV seed (postgres)", "user_id", user.ID.String(), "ids", ids)
+                logDevSeed(logger, "postgres", user, accs)
+                printDevSeedBanner(user, accs)
             }
         }
         srvMux = httpapi.New(pg, pg, pg, pg, pg, pg, pg, logger).Handler()
@@ -69,7 +59,8 @@ func main() {
         store.SeedAccount(opening)
         store.SeedAccount(cash)
         store.SeedAccount(income)
-        logger.Info("DEV seed", "user_id", user.ID.String(), "opening_balances_account_id", opening.ID.String(), "cash_account_id", cash.ID.String(), "income_account_id", income.ID.String())
+        logDevSeed(logger, "memory", user, []ledger.Account{opening, cash, income})
+        printDevSeedBanner(user, []ledger.Account{opening, cash, income})
         srvMux = httpapi.New(store, store, store, store, store, store, store, logger).Handler()
         logger.Info("storage backend: memory")
     }
@@ -102,6 +93,39 @@ func main() {
         logger.Error("server error", "err", err)
     }
     if closeFn != nil { closeFn() }
+}
+
+// logDevSeed emits structured logs with useful IDs
+func logDevSeed(l *slog.Logger, backend string, user ledger.User, accs []ledger.Account) {
+    ids := map[string]string{}
+    for _, a := range accs {
+        if a.System && strings.EqualFold(a.Group, "opening_balances") {
+            ids["opening_balances_account_id"] = a.ID.String()
+        }
+        if a.Type == ledger.AccountTypeAsset && strings.EqualFold(a.Group, "cash") {
+            ids["cash_account_id"] = a.ID.String()
+        }
+        if a.Type == ledger.AccountTypeRevenue && strings.EqualFold(a.Group, "salary") {
+            ids["income_account_id"] = a.ID.String()
+        }
+    }
+    l.Info("DEV seed ("+backend+")", "user_id", user.ID.String(), "ids", ids)
+}
+
+// printDevSeedBanner prints a simple banner to stdout for easy copy/paste of IDs
+func printDevSeedBanner(user ledger.User, accs []ledger.Account) {
+    var openingID, cashID, incomeID string
+    for _, a := range accs {
+        if a.System && strings.EqualFold(a.Group, "opening_balances") { openingID = a.ID.String() }
+        if a.Type == ledger.AccountTypeAsset && strings.EqualFold(a.Group, "cash") { cashID = a.ID.String() }
+        if a.Type == ledger.AccountTypeRevenue && strings.EqualFold(a.Group, "salary") { incomeID = a.ID.String() }
+    }
+    fmt.Println("==================== DEV SEED ====================")
+    fmt.Printf("user_id: %s\n", user.ID.String())
+    if openingID != "" { fmt.Printf("opening_balances_account_id: %s\n", openingID) }
+    if cashID != "" { fmt.Printf("cash_account_id: %s\n", cashID) }
+    if incomeID != "" { fmt.Printf("income_account_id: %s\n", incomeID) }
+    fmt.Println("==================================================")
 }
  
 // parseLogLevel maps env values to slog.Leveler
