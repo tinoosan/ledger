@@ -9,6 +9,7 @@ import (
     "github.com/govalues/money"
 
     "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/tinoosan/ledger/internal/errs"
 )
 
 // Repo defines read operations needed by the service.
@@ -43,10 +44,10 @@ func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer:
 
 func (s *service) ValidateEntry(ctx context.Context, e ledger.JournalEntry) error {
     if e.UserID == uuid.Nil {
-        return errors.New("user_id is required")
+        return errs.ErrInvalid
     }
     if e.Currency == "" {
-        return errors.New("currency is required")
+        return errs.ErrInvalid
     }
     if len(e.Lines.ByID) < 2 {
         return errors.New("at least 2 lines")
@@ -129,7 +130,7 @@ func (s *service) CreateEntry(ctx context.Context, e ledger.JournalEntry) (ledge
 
 func (s *service) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error) {
     if userID == uuid.Nil {
-        return nil, errors.New("user_id is required")
+        return nil, errs.ErrInvalid
     }
     return s.repo.EntriesByUserID(ctx, userID)
 }
@@ -137,14 +138,14 @@ func (s *service) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.J
 // ReverseEntry flips all lines of a prior entry and posts a new balancing entry.
 func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error) {
     if userID == uuid.Nil || entryID == uuid.Nil {
-        return ledger.JournalEntry{}, errors.New("user_id and entry_id are required")
+        return ledger.JournalEntry{}, errs.ErrInvalid
     }
     orig, err := s.repo.EntryByID(ctx, userID, entryID)
     if err != nil {
         return ledger.JournalEntry{}, err
     }
     if orig.UserID != userID {
-        return ledger.JournalEntry{}, errors.New("entry does not belong to user")
+        return ledger.JournalEntry{}, errs.ErrForbidden
     }
     rid := uuid.New()
     lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(orig.Lines.ByID))}
@@ -171,11 +172,11 @@ func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, d
 // Returns the correcting entry.
 func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine) (ledger.JournalEntry, error) {
     if userID == uuid.Nil || entryID == uuid.Nil {
-        return ledger.JournalEntry{}, errors.New("user_id and entry_id are required")
+        return ledger.JournalEntry{}, errs.ErrInvalid
     }
     orig, err := s.repo.EntryByID(ctx, userID, entryID)
     if err != nil { return ledger.JournalEntry{}, err }
-    if orig.UserID != userID { return ledger.JournalEntry{}, errors.New("entry does not belong to user") }
+    if orig.UserID != userID { return ledger.JournalEntry{}, errs.ErrForbidden }
 
     // 1) reversing entry
     if _, err := s.ReverseEntry(ctx, userID, entryID, date); err != nil { return ledger.JournalEntry{}, err }

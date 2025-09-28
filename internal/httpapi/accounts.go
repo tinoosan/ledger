@@ -10,6 +10,7 @@ import (
     chi "github.com/go-chi/chi/v5"
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/tinoosan/ledger/internal/errs"
 )
 
 func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
@@ -21,11 +22,9 @@ func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
     }
     acc, err := s.accountSvc.Create(r.Context(), in)
     if err != nil {
-        if errors.Is(err, account.ErrPathExists) {
-            toJSON(w, http.StatusConflict, errorResponse{Error: err.Error()})
-            return
-        }
-        toJSON(w, http.StatusInternalServerError, errorResponse{Error: "could not create account"})
+        if errors.Is(err, account.ErrPathExists) { conflict(w, err.Error()); return }
+        if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid"); return }
+        writeErr(w, http.StatusInternalServerError, "could not create account", "")
         return
     }
     resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata}
@@ -88,7 +87,7 @@ func (s *Server) getAccount(w http.ResponseWriter, r *http.Request) {
     }
     acc, err := s.repo.AccountByID(r.Context(), userID, id)
     if err != nil {
-        toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"})
+        if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return
     }
     resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata}

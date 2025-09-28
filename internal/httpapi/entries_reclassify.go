@@ -4,11 +4,12 @@ import (
     "encoding/json"
     "net/http"
     "time"
-    "strings"
 
     "github.com/google/uuid"
     "github.com/govalues/money"
     "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/tinoosan/ledger/internal/errs"
+    "errors"
 )
 
 // POST /entries/reclassify
@@ -48,23 +49,14 @@ func (s *Server) reclassifyEntry(w http.ResponseWriter, r *http.Request) {
     // call service
     saved, err := s.svc.Reclassify(r.Context(), body.UserID, body.EntryID, when, memo, cat, domLines)
     if err != nil {
-        // Map validation to 422 using same rules as validatePostEntry
-        msg := err.Error()
-        code := "validation_error"
-        switch {
-        case msg == "at least 2 lines":
-            code = "too_few_lines"
-        case strings.Contains(msg, "amount must be > 0"):
-            code = "invalid_amount"
-        case strings.Contains(msg, "currency mismatch"):
-            code = "mixed_currency"
-        case msg == "sum(debits) must equal sum(credits)":
-            code = "unbalanced_entry"
-        case strings.Contains(msg, "not found"):
-            toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"})
-            return
-        }
-        toJSON(w, http.StatusUnprocessableEntity, errorResponse{Error: msg, Code: code})
+        // 404 detection
+        if errors.Is(err, errs.ErrNotFound) { notFound(w); return }
+        if errors.Is(err, errs.ErrForbidden) { forbidden(w, "forbidden"); return }
+        if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid"); return }
+        // Validation mapping
+        code, msg := mapValidationError(err)
+        if code != "" { unprocessable(w, msg, code); return }
+        badRequest(w, err.Error())
         return
     }
     toJSON(w, http.StatusCreated, toEntryResponse(saved))

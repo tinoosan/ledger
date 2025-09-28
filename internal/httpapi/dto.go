@@ -23,10 +23,6 @@ type postEntryLine struct {
     AmountMinor int64       `json:"amount_minor"`
 }
 
-type errorResponse struct {
-    Error string `json:"error"`
-    Code  string `json:"code,omitempty"`
-}
 
 type entryResponse struct {
     ID            uuid.UUID       `json:"id"`

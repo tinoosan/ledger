@@ -7,6 +7,8 @@ import (
     chi "github.com/go-chi/chi/v5"
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/service/account"
+    "github.com/tinoosan/ledger/internal/errs"
+    "errors"
 )
 
 // updateAccount handles PATCH /accounts/{id}
@@ -42,7 +44,10 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
     }
     // load current, apply patch in http layer
     acc, err := s.repo.AccountByID(r.Context(), userID, id)
-    if err != nil { toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"}); return }
+    if err != nil {
+        if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
+        return
+    }
     if payload.Name != nil { acc.Name = *payload.Name }
     if payload.Method != nil { acc.Method = *payload.Method }
     if payload.Vendor != nil { acc.Vendor = *payload.Vendor }
@@ -52,16 +57,11 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
     }
     acc, err = s.accountSvc.Update(r.Context(), acc)
     if err != nil {
-        // map known errors
-        if err.Error() == "system accounts cannot be modified" {
-            toJSON(w, http.StatusForbidden, errorResponse{Error: err.Error()})
-            return
-        }
-        if err == account.ErrPathExists {
-            toJSON(w, http.StatusConflict, errorResponse{Error: err.Error()})
-            return
-        }
-        toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+        if errors.Is(err, errs.ErrForbidden) { forbidden(w, "forbidden") ; return }
+        if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid") ; return }
+        if errors.Is(err, errs.ErrUnprocessable) { unprocessable(w, "validation_error", "validation_error"); return }
+        if errors.Is(err, account.ErrPathExists) { conflict(w, err.Error()); return }
+        writeErr(w, http.StatusBadRequest, err.Error(), "")
         return
     }
     resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata}
@@ -87,11 +87,10 @@ func (s *Server) deactivateAccount(w http.ResponseWriter, r *http.Request) {
         return
     }
     if err := s.accountSvc.Deactivate(r.Context(), userID, id); err != nil {
-        if err.Error() == "system accounts cannot be deactivated" {
-            toJSON(w, http.StatusForbidden, errorResponse{Error: err.Error()})
-            return
-        }
-        toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
+        if errors.Is(err, errs.ErrForbidden) { forbidden(w, "forbidden"); return }
+        if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid"); return }
+        if errors.Is(err, errs.ErrNotFound) { notFound(w); return }
+        writeErr(w, http.StatusBadRequest, err.Error(), "")
         return
     }
     w.WriteHeader(http.StatusNoContent)

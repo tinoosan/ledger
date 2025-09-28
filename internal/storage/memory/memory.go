@@ -4,13 +4,13 @@ package memory
 // It keeps code paths easy to follow while allowing us to plug in a real DB later.
 import (
     "context"
-    "errors"
     "sort"
     "sync"
     "time"
 
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/tinoosan/ledger/internal/errs"
 )
 
 // entryKey tracks ordering for entries per user: sorted asc by (Date, ID)
@@ -99,7 +99,7 @@ func (s *Store) EntriesByUserID(_ context.Context, userID uuid.UUID) ([]ledger.J
 func (s *Store) EntryByID(_ context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error) {
     s.mu.RLock(); defer s.mu.RUnlock()
     e, ok := s.entries[entryID]
-    if !ok || e.UserID != userID { return ledger.JournalEntry{}, errors.New("entry not found") }
+    if !ok || e.UserID != userID { return ledger.JournalEntry{}, errs.ErrNotFound }
     return *e, nil
 }
 
@@ -139,7 +139,7 @@ func (s *Store) CreateAccount(_ context.Context, a ledger.Account) (ledger.Accou
 func (s *Store) AccountByID(_ context.Context, userID, accountID uuid.UUID) (ledger.Account, error) {
     s.mu.RLock(); defer s.mu.RUnlock()
     a, ok := s.accounts[accountID]
-    if !ok || a.UserID != userID { return ledger.Account{}, errors.New("account not found") }
+    if !ok || a.UserID != userID { return ledger.Account{}, errs.ErrNotFound }
     return a, nil
 }
 

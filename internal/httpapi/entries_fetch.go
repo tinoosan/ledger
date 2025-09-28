@@ -6,6 +6,8 @@ import (
 
     chi "github.com/go-chi/chi/v5"
     "github.com/google/uuid"
+    "github.com/tinoosan/ledger/internal/errs"
+    "errors"
 )
 
 // getEntry handles GET /entries/{id}
@@ -28,7 +30,7 @@ func (s *Server) getEntry(w http.ResponseWriter, r *http.Request) {
     }
     e, err := s.repo.EntryByID(r.Context(), userID, id)
     if err != nil {
-        toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"})
+        if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load entry", "") }
         return
     }
     toJSON(w, http.StatusOK, toEntryResponse(e))

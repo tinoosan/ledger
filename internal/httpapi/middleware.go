@@ -6,7 +6,6 @@ import (
     "encoding/json"
     "net/http"
     "time"
-    "strings"
 
     "github.com/tinoosan/ledger/internal/ledger"
     "github.com/govalues/money"
@@ -38,20 +37,8 @@ func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
             // Convert to service EntryInput and validate via service layer
             e := toEntryDomain(req)
             if err := s.svc.ValidateEntry(r.Context(), e); err != nil {
-                // Map known validation messages to 422 with codes
-                code := "validation_error"
-                msg := err.Error()
-                switch {
-                case msg == "at least 2 lines":
-                    code = "too_few_lines"
-                case strings.Contains(msg, "amount must be > 0"):
-                    code = "invalid_amount"
-                case strings.Contains(msg, "currency mismatch"):
-                    code = "mixed_currency"
-                case msg == "sum(debits) must equal sum(credits)":
-                    code = "unbalanced_entry"
-                }
-                toJSON(w, http.StatusUnprocessableEntity, errorResponse{Error: msg, Code: code})
+                code, msg := mapValidationError(err)
+                unprocessable(w, msg, code)
                 return
             }
 
@@ -191,11 +178,7 @@ func toAccountDomain(req postAccountRequest) ledger.Account {
     }
 }
 
-func writeError(w http.ResponseWriter, code int, msg string) {
-    w.Header().Set("Content-Type", "application/json")
-    w.WriteHeader(code)
-    _ = json.NewEncoder(w).Encode(errorResponse{Error: msg})
-}
+// writeError moved to errors.go as writeErr
 
 
 func toEntryDomain(req postEntryRequest) ledger.JournalEntry {

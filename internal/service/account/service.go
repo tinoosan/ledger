@@ -9,6 +9,7 @@ import (
 
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/tinoosan/ledger/internal/errs"
 )
 
 type Repo interface {
@@ -38,7 +39,7 @@ func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer:
 
 func (s *service) ValidateCreate(in ledger.Account) error {
     if in.UserID == uuid.Nil {
-        return errors.New("user_id is required")
+        return errs.ErrInvalid
     }
     if in.Name == "" {
         return errors.New("name is required")
@@ -90,7 +91,7 @@ func (s *service) Create(ctx context.Context, in ledger.Account) (ledger.Account
 
 func (s *service) List(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error) {
     if userID == uuid.Nil {
-        return nil, errors.New("user_id is required")
+        return nil, errs.ErrInvalid
     }
     return s.repo.AccountsByUserID(ctx, userID)
 }
@@ -106,17 +107,17 @@ var ErrPathExists = errors.New("account path already exists for user")
 // Update applies allowed changes to name/method/vendor/metadata using a complete domain account.
 func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account, error) {
     if a.UserID == uuid.Nil || a.ID == uuid.Nil {
-        return ledger.Account{}, errors.New("user_id and account_id are required")
+        return ledger.Account{}, errs.ErrInvalid
     }
     current, err := s.repo.AccountByID(ctx, a.UserID, a.ID)
     if err != nil { return ledger.Account{}, err }
-    if current.UserID != a.UserID { return ledger.Account{}, errors.New("account does not belong to user") }
+    if current.UserID != a.UserID { return ledger.Account{}, errs.ErrForbidden }
     if current.Metadata != nil && strings.EqualFold(current.Metadata["system"], "true") {
-        return ledger.Account{}, errors.New("system accounts cannot be modified")
+        return ledger.Account{}, errs.ErrForbidden
     }
     // Enforce immutability on Type/Currency
     if current.Type != a.Type || current.Currency != a.Currency {
-        return ledger.Account{}, errors.New("type and currency are immutable")
+        return ledger.Account{}, errs.ErrUnprocessable
     }
     // If method/vendor changed, ensure unique path
     if current.Method != a.Method || current.Vendor != a.Vendor {
@@ -136,13 +137,13 @@ func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account,
 // Deactivate sets metadata["active"]="false". No-op if system=true.
 func (s *service) Deactivate(ctx context.Context, userID, accountID uuid.UUID) error {
     if userID == uuid.Nil || accountID == uuid.Nil {
-        return errors.New("user_id and account_id are required")
+        return errs.ErrInvalid
     }
     acc, err := s.repo.AccountByID(ctx, userID, accountID)
     if err != nil { return err }
-    if acc.UserID != userID { return errors.New("account does not belong to user") }
+    if acc.UserID != userID { return errs.ErrForbidden }
     if acc.Metadata != nil && strings.EqualFold(acc.Metadata["system"], "true") {
-        return errors.New("system accounts cannot be deactivated")
+        return errs.ErrForbidden
     }
     if acc.Metadata == nil { acc.Metadata = map[string]string{} }
     acc.Metadata["active"] = "false"

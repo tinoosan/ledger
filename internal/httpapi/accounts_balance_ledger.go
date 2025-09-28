@@ -12,6 +12,8 @@ import (
     chi "github.com/go-chi/chi/v5"
     "github.com/google/uuid"
     "github.com/govalues/money"
+    "github.com/tinoosan/ledger/internal/errs"
+    "errors"
 )
 
 // GET /accounts/{id}/balance?user_id=&as_of=
@@ -29,7 +31,7 @@ func (s *Server) getAccountBalance(w http.ResponseWriter, r *http.Request) {
     }
     // ensure account exists and owned by user
     if _, err := s.repo.AccountByID(r.Context(), userID, id); err != nil {
-        toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"})
+        if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return
     }
     bal, err := s.svc.AccountBalance(r.Context(), userID, id, asOf)
@@ -49,7 +51,7 @@ func (s *Server) getAccountLedger(w http.ResponseWriter, r *http.Request) {
     if err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"}); return }
     // ensure account exists and owned by user
     if _, err := s.repo.AccountByID(r.Context(), userID, id); err != nil {
-        toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"})
+        if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return
     }
     var from, to *time.Time
