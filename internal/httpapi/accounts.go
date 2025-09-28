@@ -6,11 +6,11 @@ import (
 
     "github.com/tinoosan/ledger/internal/service/account"
     "errors"
-    "strings"
     chi "github.com/go-chi/chi/v5"
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
     "github.com/tinoosan/ledger/internal/errs"
+    "strings"
 )
 
 func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {

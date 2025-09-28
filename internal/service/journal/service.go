@@ -14,7 +14,7 @@ import (
 
 // Repo defines read operations needed by the service.
 type Repo interface {
-    AccountsByIDs(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]ledger.Account, error)
+    FetchAccounts(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]ledger.Account, error)
     ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
     GetEntry(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error)
 }
@@ -79,7 +79,7 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
         return errs.ErrUnbalancedEntry
     }
 
-    accMap, err := s.repo.AccountsByIDs(ctx, entry.UserID, ids)
+    accMap, err := s.repo.FetchAccounts(ctx, entry.UserID, ids)
     if err != nil {
         return err
     }
