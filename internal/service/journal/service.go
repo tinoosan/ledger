@@ -25,11 +25,11 @@ type Writer interface {
 
 // Service exposes validation and creation of journal entries and reporting helpers.
 type Service interface {
-    ValidateEntryInput(ctx context.Context, in EntryInput) error
-    CreateEntry(ctx context.Context, in EntryInput) (ledger.JournalEntry, error)
+    ValidateEntry(ctx context.Context, e ledger.JournalEntry) error
+    CreateEntry(ctx context.Context, e ledger.JournalEntry) (ledger.JournalEntry, error)
     ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
     ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error)
-    Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []LineInput) (ledger.JournalEntry, error)
+    Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine) (ledger.JournalEntry, error)
     TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error)
     AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error)
 }
@@ -41,103 +41,87 @@ type service struct {
 
 func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer: writer} }
 
-// EntryInput carries all data necessary to create a journal entry.
-type EntryInput struct {
-    UserID        uuid.UUID
-    Date          time.Time
-    Currency      string
-    Memo          string
-    Category      ledger.Category
-    ClientEntryID string
-    Lines         []LineInput
-}
-
-type LineInput struct {
-    AccountID   uuid.UUID
-    Side        ledger.Side
-    AmountMinor int64
-}
-
-func (s *service) ValidateEntryInput(ctx context.Context, in EntryInput) error {
-    if in.UserID == uuid.Nil {
+func (s *service) ValidateEntry(ctx context.Context, e ledger.JournalEntry) error {
+    if e.UserID == uuid.Nil {
         return errors.New("user_id is required")
     }
-    if in.Currency == "" {
+    if e.Currency == "" {
         return errors.New("currency is required")
     }
-    if len(in.Lines) < 2 {
+    if len(e.Lines.ByID) < 2 {
         return errors.New("at least 2 lines")
     }
 
-    ids := make([]uuid.UUID, 0, len(in.Lines))
+    ids := make([]uuid.UUID, 0, len(e.Lines.ByID))
     var sumDebits, sumCredits int64
-    for i, ln := range in.Lines {
+    i := 0
+    for _, ln := range e.Lines.ByID {
         if ln.AccountID == uuid.Nil {
             return fieldErr(i, "account_id required")
         }
-        if ln.AmountMinor <= 0 {
+        units, _ := ln.Amount.MinorUnits()
+        if units <= 0 {
             return fieldErr(i, "amount must be > 0")
         }
         switch ln.Side {
         case ledger.SideDebit:
-            sumDebits += ln.AmountMinor
+            sumDebits += units
         case ledger.SideCredit:
-            sumCredits += ln.AmountMinor
+            sumCredits += units
         default:
             return fieldErr(i, "side must be debit or credit")
         }
         ids = append(ids, ln.AccountID)
+        i++
     }
     if sumDebits != sumCredits {
         return errors.New("sum(debits) must equal sum(credits)")
     }
 
-    accMap, err := s.repo.AccountsByIDs(ctx, in.UserID, ids)
+    accMap, err := s.repo.AccountsByIDs(ctx, e.UserID, ids)
     if err != nil {
         return err
     }
     if len(accMap) != len(unique(ids)) {
         return errors.New("unknown or unauthorized accounts")
     }
-    for i, ln := range in.Lines {
+    i = 0
+    for _, ln := range e.Lines.ByID {
         acc, ok := accMap[ln.AccountID]
         if !ok {
             return fieldErr(i, "account not found for user")
         }
-        if acc.UserID != in.UserID {
+        if acc.UserID != e.UserID {
             return fieldErr(i, "account does not belong to user")
         }
-        if acc.Currency != in.Currency {
+        if acc.Currency != e.Currency {
             return fieldErr(i, "account currency mismatch")
         }
+        i++
     }
     return nil
 }
 
-func (s *service) CreateEntry(ctx context.Context, in EntryInput) (ledger.JournalEntry, error) {
-    // Assume ValidateEntryInput has been called; create and persist atomically.
+func (s *service) CreateEntry(ctx context.Context, e ledger.JournalEntry) (ledger.JournalEntry, error) {
+    // Assume ValidateEntry has been called; create and persist atomically.
     entryID := uuid.New()
-    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(in.Lines))}
-    for _, ln := range in.Lines {
-        amt, _ := money.NewAmountFromMinorUnits(in.Currency, ln.AmountMinor)
+    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(e.Lines.ByID))}
+    for _, ln := range e.Lines.ByID {
         id := uuid.New()
-        lines.ByID[id] = &ledger.JournalLine{
-            ID:        id,
-            EntryID:   entryID,
-            AccountID: ln.AccountID,
-            Side:      ln.Side,
-            Amount:    amt,
-        }
+        nl := *ln
+        nl.ID = id
+        nl.EntryID = entryID
+        lines.ByID[id] = &nl
     }
 
     entry := ledger.JournalEntry{
         ID:            entryID,
-        UserID:        in.UserID,
-        Date:          in.Date,
-        Currency:      in.Currency,
-        Memo:          in.Memo,
-        Category:      in.Category,
-        ClientEntryID: in.ClientEntryID,
+        UserID:        e.UserID,
+        Date:          e.Date,
+        Currency:      e.Currency,
+        Memo:          e.Memo,
+        Category:      e.Category,
+        ClientEntryID: e.ClientEntryID,
         Lines:         lines,
     }
     return s.writer.CreateJournalEntry(ctx, entry)
@@ -185,7 +169,7 @@ func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, d
 
 // Reclassify posts a reversing entry for the original, then a correcting entry with provided lines.
 // Returns the correcting entry.
-func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []LineInput) (ledger.JournalEntry, error) {
+func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine) (ledger.JournalEntry, error) {
     if userID == uuid.Nil || entryID == uuid.Nil {
         return ledger.JournalEntry{}, errors.New("user_id and entry_id are required")
     }
@@ -198,9 +182,17 @@ func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, dat
 
     // 2) correcting entry
     if memo == "" { memo = "reclassify of " + orig.ID.String() }
-    in := EntryInput{UserID: userID, Date: date, Currency: orig.Currency, Memo: memo, Category: category, Lines: newLines}
-    if err := s.ValidateEntryInput(ctx, in); err != nil { return ledger.JournalEntry{}, err }
-    return s.CreateEntry(ctx, in)
+    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(newLines))}
+    for i := range newLines {
+        ln := newLines[i]
+        id := uuid.New()
+        ln.ID = id
+        ln.EntryID = uuid.Nil
+        lines.ByID[id] = &ln
+    }
+    e := ledger.JournalEntry{UserID: userID, Date: date, Currency: orig.Currency, Memo: memo, Category: category, Lines: lines}
+    if err := s.ValidateEntry(ctx, e); err != nil { return ledger.JournalEntry{}, err }
+    return s.CreateEntry(ctx, e)
 }
 
 // TrialBalance returns net amounts per account (debits - credits) up to asOf (inclusive).

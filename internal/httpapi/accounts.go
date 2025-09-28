@@ -9,11 +9,12 @@ import (
     "strings"
     chi "github.com/go-chi/chi/v5"
     "github.com/google/uuid"
+    "github.com/tinoosan/ledger/internal/ledger"
 )
 
 func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
     v := r.Context().Value(ctxKeyPostAccount)
-    in, ok := v.(account.CreateInput)
+    in, ok := v.(ledger.Account)
     if !ok {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "validated request missing"})
         return

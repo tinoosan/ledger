@@ -11,13 +11,12 @@ import (
 
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
-    "github.com/tinoosan/ledger/internal/service/journal"
 )
 
 func (s *Server) postEntry(w http.ResponseWriter, r *http.Request) {
     // Request has already been validated and is present in context
     v := r.Context().Value(ctxKeyPostEntry)
-    in, ok := v.(journal.EntryInput)
+    in, ok := v.(ledger.JournalEntry)
     if !ok {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "validated request missing"})
         return

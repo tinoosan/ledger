@@ -30,12 +30,6 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
         toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON: "+err.Error()})
         return
     }
-    in := account.UpdateInput{
-        Name: payload.Name,
-        Method: payload.Method,
-        Vendor: payload.Vendor,
-        Metadata: payload.Metadata,
-    }
     userIDStr := r.URL.Query().Get("user_id")
     if userIDStr == "" {
         toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
@@ -46,7 +40,17 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
         toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
         return
     }
-    acc, err := s.accountSvc.Update(r.Context(), userID, id, in)
+    // load current, apply patch in http layer
+    acc, err := s.repo.AccountByID(r.Context(), userID, id)
+    if err != nil { toJSON(w, http.StatusNotFound, errorResponse{Error: "not_found", Code: "not_found"}); return }
+    if payload.Name != nil { acc.Name = *payload.Name }
+    if payload.Method != nil { acc.Method = *payload.Method }
+    if payload.Vendor != nil { acc.Vendor = *payload.Vendor }
+    if payload.Metadata != nil {
+        if acc.Metadata == nil { acc.Metadata = map[string]string{} }
+        for k, v := range payload.Metadata { acc.Metadata[k] = v }
+    }
+    acc, err = s.accountSvc.Update(r.Context(), acc)
     if err != nil {
         // map known errors
         if err.Error() == "system accounts cannot be modified" {

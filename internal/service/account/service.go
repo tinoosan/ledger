@@ -22,10 +22,10 @@ type Writer interface {
 }
 
 type Service interface {
-    ValidateCreateInput(in CreateInput) error
-    Create(ctx context.Context, in CreateInput) (ledger.Account, error)
+    ValidateCreate(a ledger.Account) error
+    Create(ctx context.Context, a ledger.Account) (ledger.Account, error)
     List(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error)
-    Update(ctx context.Context, userID, accountID uuid.UUID, in UpdateInput) (ledger.Account, error)
+    Update(ctx context.Context, a ledger.Account) (ledger.Account, error)
     Deactivate(ctx context.Context, userID, accountID uuid.UUID) error
 }
 
@@ -36,16 +36,7 @@ type service struct {
 
 func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer: writer} }
 
-type CreateInput struct {
-    UserID   uuid.UUID
-    Name     string
-    Currency string
-    Type     ledger.AccountType
-    Method   string
-    Vendor   string
-}
-
-func (s *service) ValidateCreateInput(in CreateInput) error {
+func (s *service) ValidateCreate(in ledger.Account) error {
     if in.UserID == uuid.Nil {
         return errors.New("user_id is required")
     }
@@ -70,8 +61,8 @@ func (s *service) ValidateCreateInput(in CreateInput) error {
     return nil
 }
 
-func (s *service) Create(ctx context.Context, in CreateInput) (ledger.Account, error) {
-    if err := s.ValidateCreateInput(in); err != nil {
+func (s *service) Create(ctx context.Context, in ledger.Account) (ledger.Account, error) {
+    if err := s.ValidateCreate(in); err != nil {
         return ledger.Account{}, err
     }
     // Ensure unique path per user (case-insensitive on method/vendor)
@@ -112,73 +103,34 @@ func pathKey(t ledger.AccountType, method, vendor string) string {
 // ErrPathExists indicates an account with the same normalized path already exists for the user.
 var ErrPathExists = errors.New("account path already exists for user")
 
-// UpdateInput contains mutable fields for an account.
-type UpdateInput struct {
-    Name     *string
-    Method   *string
-    Vendor   *string
-    Metadata map[string]string // merged into existing keys
-}
-
-// Update applies allowed changes to name/method/vendor/metadata.
-func (s *service) Update(ctx context.Context, userID, accountID uuid.UUID, in UpdateInput) (ledger.Account, error) {
-    if userID == uuid.Nil || accountID == uuid.Nil {
+// Update applies allowed changes to name/method/vendor/metadata using a complete domain account.
+func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account, error) {
+    if a.UserID == uuid.Nil || a.ID == uuid.Nil {
         return ledger.Account{}, errors.New("user_id and account_id are required")
     }
-    acc, err := s.repo.AccountByID(ctx, userID, accountID)
-    if err != nil {
-        return ledger.Account{}, err
-    }
-    if acc.UserID != userID {
-        return ledger.Account{}, errors.New("account does not belong to user")
-    }
-    if acc.Metadata != nil && strings.EqualFold(acc.Metadata["system"], "true") {
+    current, err := s.repo.AccountByID(ctx, a.UserID, a.ID)
+    if err != nil { return ledger.Account{}, err }
+    if current.UserID != a.UserID { return ledger.Account{}, errors.New("account does not belong to user") }
+    if current.Metadata != nil && strings.EqualFold(current.Metadata["system"], "true") {
         return ledger.Account{}, errors.New("system accounts cannot be modified")
     }
-
-    // Copy for comparison
-    orig := acc
-    // Apply changes with validation
-    if in.Name != nil {
-        acc.Name = *in.Name
+    // Enforce immutability on Type/Currency
+    if current.Type != a.Type || current.Currency != a.Currency {
+        return ledger.Account{}, errors.New("type and currency are immutable")
     }
-    if in.Method != nil {
-        acc.Method = *in.Method
-    }
-    if in.Vendor != nil {
-        acc.Vendor = *in.Vendor
-    }
-    if in.Metadata != nil {
-        if acc.Metadata == nil {
-            acc.Metadata = map[string]string{}
-        }
-        for k, v := range in.Metadata {
-            acc.Metadata[k] = v
-        }
-    }
-
     // If method/vendor changed, ensure unique path
-    if orig.Method != acc.Method || orig.Vendor != acc.Vendor {
-        existing, err := s.repo.AccountsByUserID(ctx, userID)
-        if err != nil {
-            return ledger.Account{}, err
-        }
-        desired := pathKey(acc.Type, acc.Method, acc.Vendor)
-        for _, a := range existing {
-            if a.ID == acc.ID { continue }
-            if a.UserID == userID && pathKey(a.Type, a.Method, a.Vendor) == desired {
+    if current.Method != a.Method || current.Vendor != a.Vendor {
+        existing, err := s.repo.AccountsByUserID(ctx, a.UserID)
+        if err != nil { return ledger.Account{}, err }
+        desired := pathKey(a.Type, a.Method, a.Vendor)
+        for _, other := range existing {
+            if other.ID == a.ID { continue }
+            if other.UserID == a.UserID && pathKey(other.Type, other.Method, other.Vendor) == desired {
                 return ledger.Account{}, ErrPathExists
             }
         }
     }
-
-    // Persist account
-    updated, err := s.writer.UpdateAccount(ctx, acc)
-    if err != nil {
-        return ledger.Account{}, err
-    }
-
-    return updated, nil
+    return s.writer.UpdateAccount(ctx, a)
 }
 
 // Deactivate sets metadata["active"]="false". No-op if system=true.

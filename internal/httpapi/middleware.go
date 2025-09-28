@@ -8,9 +8,9 @@ import (
     "time"
     "strings"
 
-    "github.com/tinoosan/ledger/internal/service/journal"
+    "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/govalues/money"
     "github.com/google/uuid"
-    "github.com/tinoosan/ledger/internal/service/account"
 )
 
 type ctxKey string
@@ -36,8 +36,8 @@ func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
             }
 
             // Convert to service EntryInput and validate via service layer
-            in := toEntryInput(req)
-            if err := s.svc.ValidateEntryInput(r.Context(), in); err != nil {
+            e := toEntryDomain(req)
+            if err := s.svc.ValidateEntry(r.Context(), e); err != nil {
                 // Map known validation messages to 422 with codes
                 code := "validation_error"
                 msg := err.Error()
@@ -55,7 +55,7 @@ func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
                 return
             }
 
-            ctx := context.WithValue(r.Context(), ctxKeyPostEntry, in)
+            ctx := context.WithValue(r.Context(), ctxKeyPostEntry, e)
             next.ServeHTTP(w, r.WithContext(ctx))
         })
     }
@@ -145,8 +145,8 @@ func (s *Server) validatePostAccount() func(http.Handler) http.Handler {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON: "+err.Error()})
                 return
             }
-            in := toAccountCreateInput(req)
-            if err := s.accountSvc.ValidateCreateInput(in); err != nil {
+            in := toAccountDomain(req)
+            if err := s.accountSvc.ValidateCreate(in); err != nil {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
                 return
             }
@@ -180,8 +180,8 @@ func (s *Server) validateListAccounts() func(http.Handler) http.Handler {
     }
 }
 
-func toAccountCreateInput(req postAccountRequest) account.CreateInput {
-    return account.CreateInput{
+func toAccountDomain(req postAccountRequest) ledger.Account {
+    return ledger.Account{
         UserID:   req.UserID,
         Name:     req.Name,
         Currency: req.Currency,
@@ -198,16 +198,15 @@ func writeError(w http.ResponseWriter, code int, msg string) {
 }
 
 
-func toEntryInput(req postEntryRequest) journal.EntryInput {
-    lines := make([]journal.LineInput, 0, len(req.Lines))
+func toEntryDomain(req postEntryRequest) ledger.JournalEntry {
+    // Construct domain JournalEntry with money.Amount lines
+    lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(req.Lines))}
     for _, ln := range req.Lines {
-        lines = append(lines, journal.LineInput{
-            AccountID:   ln.AccountID,
-            Side:        ln.Side,
-            AmountMinor: ln.AmountMinor,
-        })
+        amt, _ := money.NewAmountFromMinorUnits(req.Currency, ln.AmountMinor)
+        id := uuid.New()
+        lines.ByID[id] = &ledger.JournalLine{ID: id, AccountID: ln.AccountID, Side: ln.Side, Amount: amt}
     }
-    return journal.EntryInput{
+    return ledger.JournalEntry{
         UserID:        req.UserID,
         Date:          req.Date,
         Currency:      req.Currency,

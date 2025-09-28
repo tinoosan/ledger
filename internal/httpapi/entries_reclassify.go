@@ -4,11 +4,11 @@ import (
     "encoding/json"
     "net/http"
     "time"
+    "strings"
 
     "github.com/google/uuid"
+    "github.com/govalues/money"
     "github.com/tinoosan/ledger/internal/ledger"
-    "github.com/tinoosan/ledger/internal/service/journal"
-    "strings"
 )
 
 // POST /entries/reclassify
@@ -38,13 +38,15 @@ func (s *Server) reclassifyEntry(w http.ResponseWriter, r *http.Request) {
     if body.Memo != nil { memo = *body.Memo }
     var cat ledger.Category
     if body.Category != nil { cat = *body.Category }
-    // map lines to service input
-    svcLines := make([]journal.LineInput, 0, len(body.Lines))
+    // map lines to domain lines
+    domLines := make([]ledger.JournalLine, 0, len(body.Lines))
     for _, ln := range body.Lines {
-        svcLines = append(svcLines, journal.LineInput{AccountID: ln.AccountID, Side: ln.Side, AmountMinor: ln.AmountMinor})
+        amt, _ := money.NewAmountFromMinorUnits("USD", ln.AmountMinor)
+        // currency will be validated against original entry's currency; amounts are attached per line
+        domLines = append(domLines, ledger.JournalLine{AccountID: ln.AccountID, Side: ln.Side, Amount: amt})
     }
     // call service
-    saved, err := s.svc.Reclassify(r.Context(), body.UserID, body.EntryID, when, memo, cat, svcLines)
+    saved, err := s.svc.Reclassify(r.Context(), body.UserID, body.EntryID, when, memo, cat, domLines)
     if err != nil {
         // Map validation to 422 using same rules as validatePostEntry
         msg := err.Error()
