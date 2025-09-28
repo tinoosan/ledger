@@ -66,6 +66,12 @@ paths:
       summary: Create a journal entry
       operationId: createEntry
       tags: [entries]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema: { type: string }
+          description: Optional key to make POST idempotent per user. If the same key is reused, the original entry is returned.
       requestBody:
         required: true
         content:

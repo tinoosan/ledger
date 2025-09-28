@@ -16,19 +16,29 @@ import (
 
 func (s *Server) postEntry(w http.ResponseWriter, r *http.Request) {
     // Request has already been validated and is present in context
-    v := r.Context().Value(ctxKeyPostEntry)
-    in, ok := v.(ledger.JournalEntry)
+    ctxVal := r.Context().Value(ctxKeyPostEntry)
+    entry, ok := ctxVal.(ledger.JournalEntry)
     if !ok {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "validated request missing"})
         return
     }
+    // Optional idempotency key header
+    idemKey := r.Header.Get("Idempotency-Key")
+    if idemKey != "" {
+        if existing, ok, err := s.repo.ResolveEntryByIdempotencyKey(r.Context(), entry.UserID, idemKey); err == nil && ok {
+            toJSON(w, http.StatusOK, toEntryResponse(existing))
+            return
+        }
+    }
 
-    saved, err := s.svc.CreateEntry(r.Context(), in)
+    saved, err := s.svc.CreateEntry(r.Context(), entry)
     if err != nil {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "could not persist entry"})
         return
     }
-
+    if idemKey != "" {
+        _ = s.repo.SaveEntryIdempotencyKey(r.Context(), saved.UserID, idemKey, saved.ID)
+    }
     // Format response
     resp := toEntryResponse(saved)
     toJSON(w, http.StatusCreated, resp)

@@ -28,6 +28,8 @@ type Store struct {
     entries  map[uuid.UUID]*ledger.JournalEntry
     // Per-user sorted index of entries for efficient ordered scans and paging
     entryKeysByUser map[uuid.UUID][]entryKey
+    // Idempotency: userID -> key -> entryID
+    entryIdem map[uuid.UUID]map[string]uuid.UUID
 }
 
 // New constructs an empty in-memory store.
@@ -37,6 +39,7 @@ func New() *Store {
         accounts:        make(map[uuid.UUID]ledger.Account),
         entries:         make(map[uuid.UUID]*ledger.JournalEntry),
         entryKeysByUser: make(map[uuid.UUID][]entryKey),
+        entryIdem:       make(map[uuid.UUID]map[string]uuid.UUID),
     }
 }
 
@@ -49,6 +52,7 @@ func (s *Store) Reset() {
     s.accounts = map[uuid.UUID]ledger.Account{}
     s.entries = map[uuid.UUID]*ledger.JournalEntry{}
     s.entryKeysByUser = map[uuid.UUID][]entryKey{}
+    s.entryIdem = map[uuid.UUID]map[string]uuid.UUID{}
     s.mu.Unlock()
 }
 
@@ -140,6 +144,31 @@ func (s *Store) UpdateAccount(_ context.Context, a ledger.Account) (ledger.Accou
     s.mu.Lock(); defer s.mu.Unlock()
     s.accounts[a.ID] = a
     return a, nil
+}
+
+// ResolveEntryByIdempotencyKey implements httpapi.Repository.
+func (s *Store) ResolveEntryByIdempotencyKey(_ context.Context, userID uuid.UUID, key string) (ledger.JournalEntry, bool, error) {
+    s.mu.RLock(); defer s.mu.RUnlock()
+    if m, ok := s.entryIdem[userID]; ok {
+        if eid, ok2 := m[key]; ok2 {
+            if e, ok3 := s.entries[eid]; ok3 {
+                return *e, true, nil
+            }
+        }
+    }
+    return ledger.JournalEntry{}, false, nil
+}
+
+// SaveEntryIdempotencyKey implements httpapi.Repository.
+func (s *Store) SaveEntryIdempotencyKey(_ context.Context, userID uuid.UUID, key string, entryID uuid.UUID) error {
+    s.mu.Lock(); defer s.mu.Unlock()
+    m, ok := s.entryIdem[userID]
+    if !ok { m = make(map[string]uuid.UUID); s.entryIdem[userID] = m }
+    // Only set if absent to preserve idempotency
+    if _, exists := m[key]; !exists {
+        m[key] = entryID
+    }
+    return nil
 }
 
 // insertEntryIndexLocked inserts k into the per-user sorted index, keeping order asc by (Date, ID).

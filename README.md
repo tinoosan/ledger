@@ -31,7 +31,7 @@ On start, the in-memory store seeds 1 user and 2 accounts; their IDs are logged 
   - `POST /entries` — create (validates invariants; returns created entry)
   - `GET /entries/{id}?user_id=...` — fetch one
   - `POST /entries/reverse` — reverse an existing entry (flipped lines)
-  - `GET /idempotency/entries/{client_entry_id}?user_id=...` — resolve previously-created entry
+  
 - Accounts
   - `GET /accounts?user_id=...[&method=&vendor=&type=]` — list (+filters)
   - `POST /accounts` — create
@@ -70,7 +70,7 @@ See OpenAPI for detailed request/response schemas.
 
 Replace placeholders with your seeded IDs (printed at startup) or your own.
 
-Create an entry:
+Create an entry (with metadata):
 
 ```
 curl -sS -X POST http://localhost:8080/entries \
@@ -81,7 +81,14 @@ curl -sS -X POST http://localhost:8080/entries \
     "currency": "USD",
     "memo": "Lunch",
     "category": "eating_out",
-    "client_entry_id": "dev-1",
+    "metadata": {
+      "tracker.source": "monzo",
+      "tracker.source_txn_id": "tx_7FQ…",
+      "tracker.import_batch_id": "2025-09-28T10:00",
+      "tracker.input_hash": "sha256:…",
+      "tracker.rule_id": "eating_out_card_v1",
+      "tracker.method": "card"
+    },
     "lines": [
       { "account_id": "<cash_account_id>",   "side": "debit",  "amount_minor": 1500 },
       { "account_id": "<income_account_id>", "side": "credit", "amount_minor": 1500 }
@@ -150,3 +157,9 @@ curl -sS "http://localhost:8080/trial-balance?user_id=<user_id>"
 ---
 
 This service is intentionally small and explicit. If something feels unclear, it likely wants a comment right above it—PRs welcome.
+
+## Notes on duplicates and traceability
+
+- Let apps decide duplicates. The ledger validates and stores balanced entries; it does not dedupe by itself.
+- If you need safe retries, prefer an optional idempotency header your client controls (not a field on the entry).
+- For traceability, keep opaque metadata fields the caller can fill (e.g., source transaction id, import batch, input hash, rule id). The service stores `metadata` as-is and echoes it back.

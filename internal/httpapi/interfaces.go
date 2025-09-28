@@ -17,6 +17,10 @@ type Repository interface {
     AccountsByUserID(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error)
     // EntryByID returns entry by id for the user
     EntryByID(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error)
+    // ResolveEntryByIdempotencyKey resolves an entry by idempotency key for the user.
+    ResolveEntryByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (ledger.JournalEntry, bool, error)
+    // SaveEntryIdempotencyKey stores an idempotency key mapping for an entry.
+    SaveEntryIdempotencyKey(ctx context.Context, userID uuid.UUID, key string, entryID uuid.UUID) error
     AccountByID(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error)
 }
 
