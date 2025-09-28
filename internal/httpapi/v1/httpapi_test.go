@@ -586,8 +586,7 @@ func TestAccounts_InvalidAndSystemGuards(t *testing.T) {
     // mark as system in store and try to patch/delete
     aid := uuid.MustParse(ar.ID)
     a, _ := store.AccountByID(nil, userID, aid)
-    if a.Metadata == nil { a.Metadata = map[string]string{} }
-    a.Metadata["system"] = "true"
+    a.System = true
     store.UpdateAccount(nil, a)
 
     // patch -> 403
@@ -689,4 +688,22 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     if a.Metadata["active"] != "false" {
         t.Fatalf("expected active=false after delete; got: %v", a.Metadata)
     }
+}
+
+func TestOpeningBalances_EndpointCreatesPerCurrency(t *testing.T) {
+    _, h, userID, _, _ := setup(t)
+
+    // Request GBP OpeningBalances (should create it)
+    r := httptest.NewRequest(http.MethodGet, "/v1/accounts/opening-balances?user_id="+userID.String()+"&currency=GBP", nil)
+    rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
+    if rr.Code != http.StatusOK { t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String()) }
+    var ar acctResp
+    _ = json.Unmarshal(rr.Body.Bytes(), &ar)
+    if ar.Type != "equity" || ar.Path != "equity:openingbalances" || ar.Currency != "GBP" {
+        t.Fatalf("unexpected opening account: %+v", ar)
+    }
+
+    // Idempotent: second call returns same currency/system account
+    rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r)
+    if rr2.Code != http.StatusOK { t.Fatalf("expected 200, got %d", rr2.Code) }
 }

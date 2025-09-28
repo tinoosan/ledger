@@ -92,27 +92,21 @@ func (s *Server) trialBalance(w http.ResponseWriter, r *http.Request) {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to load accounts"})
         return
     }
-    // Build response
-    response := trialBalanceResponse{UserID: query.UserID, AsOf: query.AsOf}
-    response.Accounts = make([]trialBalanceAccount, 0, len(netAmountsByAccount))
+    // Build grouped response by currency
+    groupsMap := map[string][]trialBalanceAccount{}
     for accountID, amount := range netAmountsByAccount {
         account := accountsByID[accountID]
         units, _ := amount.MinorUnits()
         var debit, credit int64
         if units >= 0 { debit, credit = units, 0 } else { debit, credit = 0, -units }
-        // decimals using money.Amount.Decimal()
         dstr, cstr := "0", "0"
         if debit > 0 {
-            if a, err := money.NewAmountFromMinorUnits(account.Currency, debit); err == nil {
-                dstr = a.Decimal().String()
-            }
+            if a, err := money.NewAmountFromMinorUnits(account.Currency, debit); err == nil { dstr = a.Decimal().String() }
         }
         if credit > 0 {
-            if a, err := money.NewAmountFromMinorUnits(account.Currency, credit); err == nil {
-                cstr = a.Decimal().String()
-            }
+            if a, err := money.NewAmountFromMinorUnits(account.Currency, credit); err == nil { cstr = a.Decimal().String() }
         }
-        response.Accounts = append(response.Accounts, trialBalanceAccount{
+        item := trialBalanceAccount{
             AccountID: accountID,
             Name: account.Name,
             Path: account.Path(),
@@ -122,7 +116,17 @@ func (s *Server) trialBalance(w http.ResponseWriter, r *http.Request) {
             Debit: dstr,
             Credit: cstr,
             Type: account.Type,
-        })
+        }
+        groupsMap[account.Currency] = append(groupsMap[account.Currency], item)
+    }
+    // order groups by currency for deterministic output
+    response := trialBalanceResponse{UserID: query.UserID, AsOf: query.AsOf}
+    response.Groups = make([]trialBalanceCurrencyGroup, 0, len(groupsMap))
+    keys := make([]string, 0, len(groupsMap))
+    for c := range groupsMap { keys = append(keys, c) }
+    sort.Strings(keys)
+    for _, c := range keys {
+        response.Groups = append(response.Groups, trialBalanceCurrencyGroup{Currency: c, Accounts: groupsMap[c]})
     }
     toJSON(w, http.StatusOK, response)
 }

@@ -81,10 +81,15 @@ type trialBalanceAccount struct {
     Type        ledger.AccountType `json:"type"`
 }
 
+type trialBalanceCurrencyGroup struct {
+    Currency string                 `json:"currency"`
+    Accounts []trialBalanceAccount  `json:"accounts"`
+}
+
 type trialBalanceResponse struct {
-    UserID   uuid.UUID             `json:"user_id"`
-    AsOf     *time.Time            `json:"as_of,omitempty"`
-    Accounts []trialBalanceAccount `json:"accounts"`
+    UserID uuid.UUID                  `json:"user_id"`
+    AsOf   *time.Time                 `json:"as_of,omitempty"`
+    Groups []trialBalanceCurrencyGroup `json:"groups"`
 }
 
 // Accounts
@@ -96,6 +101,7 @@ type postAccountRequest struct {
     Type     ledger.AccountType  `json:"type"`
     Method   string              `json:"method"`
     Vendor   string              `json:"vendor"`
+    System   bool                `json:"system,omitempty"`
 }
 
 type accountResponse struct {
@@ -108,6 +114,7 @@ type accountResponse struct {
     Vendor   string              `json:"vendor"`
     Path     string              `json:"path"`
     Metadata map[string]string   `json:"metadata,omitempty"`
+    System   bool                `json:"system"`
 }
 
 type listAccountsQuery struct {

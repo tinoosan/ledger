@@ -77,11 +77,17 @@ type Account struct {
     Vendor   string
     // Metadata holds additional key-value attributes for the account.
     Metadata map[string]string
+    // System marks reserved, immutable accounts (e.g., Equity:OpeningBalances).
+    System   bool
 }
 
 // Path returns a colon-separated identifier for the account: Type:Method:Vendor.
 // Example: assets:bank:monzo
 func (a Account) Path() string {
+    // Special-case OpeningBalances: show concise path without vendor and with lowercase
+    if a.Type == AccountTypeEquity && strings.EqualFold(a.Method, "OpeningBalances") {
+        return "equity:openingbalances"
+    }
     return string(a.Type) + ":" + strings.ToLower(a.Method) + ":" + strings.ToLower(a.Vendor)
 }
 

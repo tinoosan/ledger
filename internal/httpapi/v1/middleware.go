@@ -175,6 +175,7 @@ func toAccountDomain(req postAccountRequest) ledger.Account {
         Type:     req.Type,
         Method:   req.Method,
         Vendor:   req.Vendor,
+        System:   req.System,
     }
 }
 

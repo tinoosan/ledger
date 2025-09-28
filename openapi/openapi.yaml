@@ -217,6 +217,24 @@ paths:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
+  /accounts/opening-balances:
+    get:
+      summary: Get or create the Opening Balances account for a currency
+      operationId: getOpeningBalancesAccount
+      tags: [accounts]
+      parameters:
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: currency
+          required: true
+          schema: { type: string }
+      responses:
+        '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
   /accounts/{id}:
     get:
       summary: Get an account
@@ -429,6 +447,9 @@ components:
         vendor:
           type: string
           description: "Institution/identifier, e.g. Monzo | Amex | PayPal"
+        system:
+          type: boolean
+          description: Reserved system account (immutable); when true, path must be equity:openingbalances:system
     AccountUpdateRequest:
       type: object
       properties:
@@ -453,6 +474,8 @@ components:
               type: object
               additionalProperties:
                 type: string
+            system:
+              type: boolean
 
     AccountBalanceResponse:
       type: object
@@ -508,14 +531,21 @@ components:
         credit:
           type: string
           description: Decimal credit amount in major units
+    TrialBalanceCurrencyGroup:
+      type: object
+      properties:
+        currency: { type: string }
+        accounts:
+          type: array
+          items: { $ref: '#/components/schemas/TrialBalanceAccount' }
     TrialBalanceResponse:
       type: object
       properties:
         user_id: { $ref: '#/components/schemas/UUID' }
         as_of: { type: string, format: date-time }
-        accounts:
+        groups:
           type: array
-          items: { $ref: '#/components/schemas/TrialBalanceAccount' }
+          items: { $ref: '#/components/schemas/TrialBalanceCurrencyGroup' }
 
     Error:
       type: object

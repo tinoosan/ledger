@@ -13,7 +13,7 @@ A small ledger service focused on validation and storage of journal entries and 
   - `LOG_FORMAT` = `json` (default) | `text`
   - `LOG_LEVEL`  = `DEBUG` | `INFO` | `WARNING` | `ERROR`
 
-On start, the in-memory store seeds 1 user and 2 accounts; their IDs are logged for quick testing.
+On start, the in-memory store seeds 1 user and 3 accounts (including the system OpeningBalances); their IDs are logged for quick testing.
 
 ## API Docs
 
@@ -39,8 +39,9 @@ On start, the in-memory store seeds 1 user and 2 accounts; their IDs are logged 
   - `DELETE /accounts/{id}?user_id=...` — soft delete (metadata.active=false)
   - `GET /accounts/{id}/balance?user_id=...[&as_of=...]` — signed balance (minor units)
   - `GET /accounts/{id}/ledger?user_id=...[&from=&to=&limit=&cursor=]` — paginated feed with running balance
+  - `GET /accounts/opening-balances?user_id=...&currency=...` — returns the currency-matched OpeningBalances account (creates if missing)
 - Reports
-  - `GET /trial-balance?user_id=...[&as_of=...]` — net debit/credit per account
+  - `GET /trial-balance?user_id=...[&as_of=...]` — net debit/credit per account grouped by currency
 
 See OpenAPI for detailed request/response schemas.
 
@@ -54,7 +55,10 @@ See OpenAPI for detailed request/response schemas.
 - Soft deletes only
   - Deactivate by setting `metadata.active=false`; no hard deletes
 - System accounts
-  - `metadata.system=true` → forbid PATCH/DELETE
+  - `system=true` → forbid PATCH/DELETE
+  - Reserved: `Equity:OpeningBalances` (path `equity:openingbalances:system`)
+  - Created automatically for a user when their first account is created
+  - Immutable identity; used for initial balances and migrations
 - Misclassification
   - Don’t retag type/currency; create a new account and post entries to move balances
 

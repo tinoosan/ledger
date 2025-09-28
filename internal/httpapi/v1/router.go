@@ -66,6 +66,10 @@ func (s *Server) routes() {
     s.rt.Get("/v1/accounts/{id}", s.getAccount)
     s.rt.Get("/v1/accounts/{id}/balance", s.getAccountBalance)
     s.rt.Get("/v1/accounts/{id}/ledger", s.getAccountLedger)
+    s.rt.Get("/v1/accounts/opening-balances", s.getOpeningBalancesAccount)
+    // Unversioned aliases for convenience/tests
+    s.rt.Get("/accounts/{id}/balance", s.getAccountBalance)
+    s.rt.Get("/accounts/{id}/ledger", s.getAccountLedger)
     s.rt.Patch("/v1/accounts/{id}", s.updateAccount)
     s.rt.Delete("/v1/accounts/{id}", s.deactivateAccount)
     // Health (unversioned)

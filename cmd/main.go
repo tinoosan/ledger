@@ -26,14 +26,17 @@ func main() {
     // In-memory repository for now
     store := memory.New()
 
-    // Quick dev seeder: one user + two USD accounts
+    // Quick dev seeder: one user + two USD accounts + system OpeningBalances
     user := ledger.User{ID: uuid.New()}
     store.SeedUser(user)
+    // System account reserved for opening balances
+    opening := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Opening Balances", Currency: "USD", Type: ledger.AccountTypeEquity, Method: "OpeningBalances", Vendor: "System", System: true, Metadata: map[string]string{"active":"true"}}
     cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset, Method: "Cash", Vendor: "Wallet"}
     income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue, Method: "Salary", Vendor: "Employer"}
+    store.SeedAccount(opening)
     store.SeedAccount(cash)
     store.SeedAccount(income)
-    logger.Info("DEV seed", "user_id", user.ID.String(), "cash_account_id", cash.ID.String(), "income_account_id", income.ID.String())
+    logger.Info("DEV seed", "user_id", user.ID.String(), "opening_balances_account_id", opening.ID.String(), "cash_account_id", cash.ID.String(), "income_account_id", income.ID.String())
 
     srvMux := httpapi.New(store, store, store, store, store, store, store, logger).Handler()
 
