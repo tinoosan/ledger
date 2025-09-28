@@ -10,6 +10,7 @@ import (
     "github.com/tinoosan/ledger/internal/ledger"
     "github.com/govalues/money"
     "github.com/google/uuid"
+    "github.com/tinoosan/ledger/internal/meta"
 )
 
 type ctxKey string
@@ -34,6 +35,12 @@ func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
                 return
             }
 
+            // Validate metadata if provided
+            if req.Metadata != nil {
+                if err := meta.New(req.Metadata).Validate(); err != nil {
+                    unprocessable(w, "validation_error", "validation_error"); return
+                }
+            }
             // Convert to service EntryInput and validate via service layer
             e := toEntryDomain(req)
             if err := s.svc.ValidateEntry(r.Context(), e); err != nil {
@@ -132,6 +139,11 @@ func (s *Server) validatePostAccount() func(http.Handler) http.Handler {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON: "+err.Error()})
                 return
             }
+            if req.Metadata != nil {
+                if err := meta.New(req.Metadata).Validate(); err != nil {
+                    unprocessable(w, "validation_error", "validation_error"); return
+                }
+            }
             in := toAccountDomain(req)
             if err := s.accountSvc.ValidateCreate(in); err != nil {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
@@ -176,7 +188,7 @@ func toAccountDomain(req postAccountRequest) ledger.Account {
         Method:   req.Method,
         Vendor:   req.Vendor,
         System:   req.System,
-        Metadata: req.Metadata,
+        Metadata: meta.New(req.Metadata),
     }
 }
 
@@ -195,7 +207,7 @@ func toEntryDomain(req postEntryRequest) ledger.JournalEntry {
         Currency:      req.Currency,
         Memo:          req.Memo,
         Category:      req.Category,
-        Metadata:      req.Metadata,
+        Metadata:      meta.New(req.Metadata),
         Lines:         lines,
     }
 }

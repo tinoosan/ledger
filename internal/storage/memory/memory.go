@@ -43,6 +43,19 @@ func New() *Store {
     }
 }
 
+// clone helpers to avoid shared state exposure
+func cloneAccount(a ledger.Account) ledger.Account {
+    cloned := a
+    cloned.Metadata = a.Metadata.Clone()
+    return cloned
+}
+
+func cloneEntry(e ledger.JournalEntry) ledger.JournalEntry {
+    cloned := e
+    cloned.Metadata = e.Metadata.Clone()
+    return cloned
+}
+
 // Seed helpers for local dev/tests.
 func (s *Store) SeedUser(u ledger.User)               { s.mu.Lock(); s.users[u.ID] = struct{}{}; s.mu.Unlock() }
 func (s *Store) SeedAccount(a ledger.Account)         { s.mu.Lock(); s.accounts[a.ID] = a; s.mu.Unlock() }
@@ -85,9 +98,10 @@ func (s *Store) CreateJournalEntry(_ context.Context, entry ledger.JournalEntry)
     defer s.mu.Unlock()
     // store shallow copy
     e := entry
+    e.Metadata = entry.Metadata.Clone()
     s.entries[e.ID] = &e
     s.insertEntryIndexLocked(e.UserID, entryKey{Date: e.Date, ID: e.ID})
-    return e, nil
+    return cloneEntry(e), nil
 }
 
 // UpdateJournalEntry updates an existing journal entry by ID.
@@ -95,8 +109,9 @@ func (s *Store) UpdateJournalEntry(_ context.Context, entry ledger.JournalEntry)
     s.mu.Lock(); defer s.mu.Unlock()
     if _, ok := s.entries[entry.ID]; !ok { return ledger.JournalEntry{}, errs.ErrNotFound }
     e := entry
+    e.Metadata = entry.Metadata.Clone()
     s.entries[entry.ID] = &e
-    return e, nil
+    return cloneEntry(e), nil
 }
 
 // EntriesByUserID returns all entries for a user.
@@ -107,7 +122,7 @@ func (s *Store) EntriesByUserID(_ context.Context, userID uuid.UUID) ([]ledger.J
     out := make([]ledger.JournalEntry, 0, len(keys))
     for _, k := range keys {
         if e, ok := s.entries[k.ID]; ok && e.UserID == userID {
-            out = append(out, *e)
+            out = append(out, cloneEntry(*e))
         }
     }
     return out, nil
@@ -123,7 +138,7 @@ func (s *Store) EntryByID(_ context.Context, userID, entryID uuid.UUID) (ledger.
     s.mu.RLock(); defer s.mu.RUnlock()
     e, ok := s.entries[entryID]
     if !ok || e.UserID != userID { return ledger.JournalEntry{}, errs.ErrNotFound }
-    return *e, nil
+    return cloneEntry(*e), nil
 }
 
 // GetEntry is an alias to EntryByID to satisfy httpapi.EntryReader.
@@ -141,7 +156,7 @@ func (s *Store) AccountsByUserID(_ context.Context, userID uuid.UUID) ([]ledger.
     out := make([]ledger.Account, 0)
     for _, a := range s.accounts {
         if a.UserID == userID {
-            out = append(out, a)
+            out = append(out, cloneAccount(a))
         }
     }
     return out, nil
@@ -156,8 +171,9 @@ func (s *Store) ListAccounts(ctx context.Context, userID uuid.UUID) ([]ledger.Ac
 func (s *Store) CreateAccount(_ context.Context, a ledger.Account) (ledger.Account, error) {
     s.mu.Lock()
     defer s.mu.Unlock()
-    s.accounts[a.ID] = a
-    return a, nil
+    ca := cloneAccount(a)
+    s.accounts[a.ID] = ca
+    return cloneAccount(ca), nil
 }
 
 // AccountByID returns a user's account by ID.
@@ -165,7 +181,7 @@ func (s *Store) AccountByID(_ context.Context, userID, accountID uuid.UUID) (led
     s.mu.RLock(); defer s.mu.RUnlock()
     a, ok := s.accounts[accountID]
     if !ok || a.UserID != userID { return ledger.Account{}, errs.ErrNotFound }
-    return a, nil
+    return cloneAccount(a), nil
 }
 
 // GetAccount is an alias to AccountByID to satisfy httpapi.AccountReader.
@@ -176,8 +192,9 @@ func (s *Store) GetAccount(ctx context.Context, userID, accountID uuid.UUID) (le
 // UpdateAccount persists changes to an account.
 func (s *Store) UpdateAccount(_ context.Context, a ledger.Account) (ledger.Account, error) {
     s.mu.Lock(); defer s.mu.Unlock()
-    s.accounts[a.ID] = a
-    return a, nil
+    ca := cloneAccount(a)
+    s.accounts[a.ID] = ca
+    return cloneAccount(ca), nil
 }
 
 // ResolveEntryByIdempotencyKey implements httpapi.Repository.

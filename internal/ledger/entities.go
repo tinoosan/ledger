@@ -6,6 +6,7 @@ import (
 
     "github.com/google/uuid"
     "github.com/govalues/money"
+    "github.com/tinoosan/ledger/internal/meta"
 )
 
 // Side represents the accounting position of a journal line.
@@ -76,7 +77,7 @@ type Account struct {
     // Vendor identifies the specific institution or instance (e.g., Monzo, Amex, PayPal, LandlordLtd, EmployerX).
     Vendor   string
     // Metadata holds additional key-value attributes for the account.
-    Metadata map[string]string
+    Metadata meta.Metadata `json:"metadata,omitempty"`
     // System marks reserved, immutable accounts (e.g., Equity:OpeningBalances).
     System   bool
     // Active indicates whether the account is active (soft-delete when false).
@@ -104,7 +105,7 @@ type JournalEntry struct {
     Category      Category
     ClientEntryID string
     // Metadata holds additional key-value attributes for the entry.
-    Metadata      map[string]string
+    Metadata      meta.Metadata `json:"metadata,omitempty"`
     // IsReversed marks that this entry has been reversed.
     IsReversed    bool
     Lines         JournalLines

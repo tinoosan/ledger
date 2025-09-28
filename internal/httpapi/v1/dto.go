@@ -5,6 +5,7 @@ import (
 
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/tinoosan/ledger/internal/meta"
 )
 
 type postEntryRequest struct {
@@ -31,7 +32,7 @@ type entryResponse struct {
     Currency      string          `json:"currency"`
     Memo          string          `json:"memo"`
     Category      ledger.Category `json:"category"`
-    Metadata      map[string]string `json:"metadata,omitempty"`
+    Metadata      meta.Metadata `json:"metadata,omitempty"`
     IsReversed    bool            `json:"is_reversed"`
     Lines         []lineResponse  `json:"lines"`
 }
@@ -114,7 +115,7 @@ type accountResponse struct {
     Method   string              `json:"method"`
     Vendor   string              `json:"vendor"`
     Path     string              `json:"path"`
-    Metadata map[string]string   `json:"metadata,omitempty"`
+    Metadata meta.Metadata   `json:"metadata,omitempty"`
     System   bool                `json:"system"`
     Active   bool                `json:"active"`
 }

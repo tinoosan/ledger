@@ -9,6 +9,7 @@ import (
     "github.com/tinoosan/ledger/internal/service/account"
     "github.com/tinoosan/ledger/internal/errs"
     "errors"
+    "github.com/tinoosan/ledger/internal/meta"
 )
 
 // updateAccount handles PATCH /accounts/{id}
@@ -52,8 +53,11 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
     if payload.Method != nil { acc.Method = *payload.Method }
     if payload.Vendor != nil { acc.Vendor = *payload.Vendor }
     if payload.Metadata != nil {
-        if acc.Metadata == nil { acc.Metadata = map[string]string{} }
-        for k, v := range payload.Metadata { acc.Metadata[k] = v }
+        // validate and merge
+        m := meta.New(payload.Metadata)
+        if err := m.Validate(); err != nil { unprocessable(w, "validation_error", "validation_error"); return }
+        if acc.Metadata == nil { acc.Metadata = meta.Metadata{} }
+        acc.Metadata.Merge(m)
     }
     acc, err = s.accountSvc.Update(r.Context(), acc)
     if err != nil {

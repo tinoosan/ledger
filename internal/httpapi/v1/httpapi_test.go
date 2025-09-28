@@ -694,6 +694,19 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     }
 }
 
+func TestAccounts_InvalidMetadata422(t *testing.T) {
+    _, h, userID, _, _ := setup(t)
+    // key too long
+    longKey := make([]byte, 65)
+    for i := range longKey { longKey[i] = 'k' }
+    acct := map[string]any{"user_id": userID.String(), "name": "BadMeta", "currency": "USD", "type": "asset", "method": "Bank", "vendor": "X", "metadata": map[string]any{string(longKey): "v"}}
+    b, _ := json.Marshal(acct)
+    r := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
+    r.Header.Set("Content-Type", "application/json")
+    rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
+    if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String()) }
+}
+
 func TestOpeningBalances_EndpointCreatesPerCurrency(t *testing.T) {
     _, h, userID, _, _ := setup(t)
 
