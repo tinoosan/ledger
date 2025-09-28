@@ -29,6 +29,7 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
 - Entries
   - `GET /entries?user_id=...` — list
   - `POST /entries` — create (validates invariants; returns created entry)
+  - `POST /entries/batch` — create many entries in one call
   - `GET /entries/{id}?user_id=...` — fetch one
   - `POST /entries/reverse` — reverse an existing entry (flipped lines)
   
@@ -207,3 +208,33 @@ This service is intentionally small and explicit. If something feels unclear, it
 - Let apps decide duplicates. The ledger validates and stores balanced entries; it does not dedupe by itself.
 - If you need safe retries, prefer an optional idempotency header your client controls (not a field on the entry).
 - For traceability, keep opaque metadata fields the caller can fill (e.g., source transaction id, import batch, input hash, rule id). The service stores `metadata` as-is and echoes it back.
+Batch create entries:
+
+```
+curl -sS -X POST http://localhost:8080/entries/batch \
+  -H 'Content-Type: application/json' \
+  -d '[
+    {
+      "user_id": "<user_id>",
+      "date": "2025-09-27T12:00:00Z",
+      "currency": "USD",
+      "memo": "Initial groceries",
+      "category": "groceries",
+      "lines": [
+        { "account_id": "<cash_account_id>",   "side": "credit", "amount_minor": 5000 },
+        { "account_id": "<groceries_account_id>", "side": "debit", "amount_minor": 5000 }
+      ]
+    },
+    {
+      "user_id": "<user_id>",
+      "date": "2025-09-28T08:00:00Z",
+      "currency": "USD",
+      "memo": "Lunch",
+      "category": "eating_out",
+      "lines": [
+        { "account_id": "<cash_account_id>",   "side": "credit", "amount_minor": 1500 },
+        { "account_id": "<eating_out_account_id>", "side": "debit", "amount_minor": 1500 }
+      ]
+    }
+  ]'
+```

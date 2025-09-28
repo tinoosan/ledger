@@ -55,6 +55,7 @@ func (s *Server) Mux() http.Handler { return s.rt }
 func (s *Server) routes() {
     // Entries (v1)
     s.rt.With(s.validatePostEntry()).Post("/v1/entries", s.postEntry)
+    s.rt.Post("/v1/entries/batch", s.postEntriesBatch)
     s.rt.With(s.validateListEntries()).Get("/v1/entries", s.listEntries)
     s.rt.Get("/v1/entries/{id}", s.getEntry)
     s.rt.With(s.validateReverseEntry()).Post("/v1/entries/reverse", s.reverseEntry)
