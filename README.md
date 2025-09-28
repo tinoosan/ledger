@@ -35,6 +35,7 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
 - Accounts
   - `GET /accounts?user_id=...[&method=&vendor=&type=]` — list (+filters)
   - `POST /accounts` — create
+  - `POST /accounts/batch` — create many in one call
   - `PATCH /accounts/{id}?user_id=...` — update name/method/vendor/metadata
   - `DELETE /accounts/{id}?user_id=...` — soft delete (active=false)
   - `GET /accounts/{id}/balance?user_id=...[&as_of=...]` — signed balance (minor units)
@@ -159,6 +160,25 @@ Trial balance:
 
 ```
 curl -sS "http://localhost:8080/trial-balance?user_id=<user_id>"
+```
+
+Batch create accounts:
+
+```
+curl -sS -X POST http://localhost:8080/v1/accounts/batch \
+  -H 'Content-Type: application/json' \
+  -d '[
+    {"user_id": "<user_id>", "name": "Groceries",     "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"},
+    {"user_id": "<user_id>", "name": "Eating Out",    "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"},
+    {"user_id": "<user_id>", "name": "Transport",     "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"},
+    {"user_id": "<user_id>", "name": "Groceries",     "currency": "GBP", "type": "expense", "method": "Category", "vendor": "General"}
+  ]'
+```
+
+Get or create OpeningBalances for a currency:
+
+```
+curl -sS "http://localhost:8080/v1/accounts/opening-balances?user_id=<user_id>&currency=GBP"
 ```
 
 ## Project Layout
