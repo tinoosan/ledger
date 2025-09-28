@@ -90,6 +90,15 @@ func (s *Store) CreateJournalEntry(_ context.Context, entry ledger.JournalEntry)
     return e, nil
 }
 
+// UpdateJournalEntry updates an existing journal entry by ID.
+func (s *Store) UpdateJournalEntry(_ context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error) {
+    s.mu.Lock(); defer s.mu.Unlock()
+    if _, ok := s.entries[entry.ID]; !ok { return ledger.JournalEntry{}, errs.ErrNotFound }
+    e := entry
+    s.entries[entry.ID] = &e
+    return e, nil
+}
+
 // EntriesByUserID returns all entries for a user.
 func (s *Store) EntriesByUserID(_ context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error) {
     s.mu.RLock()

@@ -1,4 +1,4 @@
-package httpapi
+package v1
 
 import (
     "net/http"
@@ -30,6 +30,8 @@ func mapValidationError(err error) (code, msg string) {
     if err == nil { return "", "" }
     msg = err.Error()
     switch {
+    case errors.Is(err, errs.ErrAlreadyReversed):
+        return "already_reversed", msg
     case errors.Is(err, errs.ErrTooFewLines):
         return "too_few_lines", msg
     case errors.Is(err, errs.ErrInvalidAmount):

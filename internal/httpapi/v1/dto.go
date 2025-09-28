@@ -1,4 +1,4 @@
-package httpapi
+package v1
 
 import (
     "time"
@@ -32,6 +32,7 @@ type entryResponse struct {
     Memo          string          `json:"memo"`
     Category      ledger.Category `json:"category"`
     Metadata      map[string]string `json:"metadata,omitempty"`
+    IsReversed    bool            `json:"is_reversed"`
     Lines         []lineResponse  `json:"lines"`
 }
 

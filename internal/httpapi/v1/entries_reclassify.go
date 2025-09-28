@@ -1,4 +1,4 @@
-package httpapi
+package v1
 
 import (
     "encoding/json"
@@ -52,6 +52,7 @@ func (s *Server) reclassifyEntry(w http.ResponseWriter, r *http.Request) {
     if err != nil {
         // 404 detection
         if errors.Is(err, errs.ErrNotFound) { notFound(w); return }
+        if errors.Is(err, errs.ErrAlreadyReversed) { unprocessable(w, "already_reversed", "already_reversed"); return }
         if errors.Is(err, errs.ErrForbidden) { forbidden(w, "forbidden"); return }
         if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid"); return }
         // Validation mapping

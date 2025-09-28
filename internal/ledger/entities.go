@@ -97,6 +97,8 @@ type JournalEntry struct {
     ClientEntryID string
     // Metadata holds additional key-value attributes for the entry.
     Metadata      map[string]string
+    // IsReversed marks that this entry has been reversed.
+    IsReversed    bool
     Lines         JournalLines
 }
 

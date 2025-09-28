@@ -1,4 +1,4 @@
-package httpapi
+package v1
 
 import (
     "bytes"
@@ -79,7 +79,7 @@ func TestPostEntries_ValidAndInvalid(t *testing.T) {
         },
     }
     b, _ := json.Marshal(body)
-    req := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    req := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
     rec := httptest.NewRecorder()
     h.ServeHTTP(rec, req)
@@ -100,10 +100,10 @@ func TestPostEntries_ValidAndInvalid(t *testing.T) {
         {"account_id": income.ID.String(), "side": "credit", "amount_minor": 1400},
     }
     b, _ = json.Marshal(body)
-    req = httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    req = httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
     rec = httptest.NewRecorder()
-    reqDup := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(b))
+    reqDup := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
     reqDup.Header.Set("Content-Type", "application/json")
     h.ServeHTTP(rec, reqDup)
     if rec.Code != http.StatusBadRequest {
@@ -127,7 +127,7 @@ func TestEntries_ReverseAndList(t *testing.T) {
         },
     }
     b, _ := json.Marshal(body)
-    req := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    req := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
     rec := httptest.NewRecorder()
     h.ServeHTTP(rec, req)
@@ -138,7 +138,7 @@ func TestEntries_ReverseAndList(t *testing.T) {
     // reverse it
     rev := map[string]any{"user_id": userID.String(), "entry_id": er.ID}
     rb, _ := json.Marshal(rev)
-    r2 := httptest.NewRequest(http.MethodPost, "/entries/reverse", bytes.NewReader(rb))
+    r2 := httptest.NewRequest(http.MethodPost, "/v1/entries/reverse", bytes.NewReader(rb))
     r2.Header.Set("Content-Type", "application/json")
     rec2 := httptest.NewRecorder()
     h.ServeHTTP(rec2, r2)
@@ -148,7 +148,7 @@ func TestEntries_ReverseAndList(t *testing.T) {
     if len(er2.Lines) != 2 { t.Fatalf("expected 2 lines in reversal") }
 
     // list should have at least the two
-    r3 := httptest.NewRequest(http.MethodGet, "/entries?user_id="+userID.String(), nil)
+    r3 := httptest.NewRequest(http.MethodGet, "/v1/entries?user_id="+userID.String(), nil)
     rec3 := httptest.NewRecorder()
     h.ServeHTTP(rec3, r3)
     if rec3.Code != http.StatusOK { t.Fatalf("list entries expected 200, got %d", rec3.Code) }
@@ -168,18 +168,101 @@ func TestEntries_GetAndIdempotency(t *testing.T) {
         },
     }
     b, _ := json.Marshal(body)
-    req := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    req := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
     rec := httptest.NewRecorder(); h.ServeHTTP(rec, req)
     if rec.Code != http.StatusCreated { t.Fatalf("create entry expected 201, got %d", rec.Code) }
     var er entryResp; _ = json.Unmarshal(rec.Body.Bytes(), &er)
 
     // GET /entries/{id}
-    r := httptest.NewRequest(http.MethodGet, "/entries/"+er.ID+"?user_id="+userID.String(), nil)
+    r := httptest.NewRequest(http.MethodGet, "/v1/entries/"+er.ID+"?user_id="+userID.String(), nil)
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusOK { t.Fatalf("get entry expected 200, got %d", rr.Code) }
 
     // idempotency endpoint removed for now
+}
+
+func TestReclassify_BlockedAfterReverse(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+    // create one entry
+    body := map[string]any{
+        "user_id":  userID.String(),
+        "date":     time.Now().UTC().Format(time.RFC3339),
+        "currency": "USD",
+        "memo":     "Test",
+        "category": "general",
+        "lines": []map[string]any{
+            {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 700},
+            {"account_id": income.ID.String(), "side": "credit", "amount_minor": 700},
+        },
+    }
+    b, _ := json.Marshal(body)
+    req := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder(); h.ServeHTTP(rec, req)
+    if rec.Code != http.StatusCreated { t.Fatalf("create entry expected 201, got %d", rec.Code) }
+    var er entryResp; _ = json.Unmarshal(rec.Body.Bytes(), &er)
+
+    // reverse it
+    rev := map[string]any{"user_id": userID.String(), "entry_id": er.ID}
+    rb, _ := json.Marshal(rev)
+    r1 := httptest.NewRequest(http.MethodPost, "/v1/entries/reverse", bytes.NewReader(rb))
+    r1.Header.Set("Content-Type", "application/json")
+    rr1 := httptest.NewRecorder(); h.ServeHTTP(rr1, r1)
+    if rr1.Code != http.StatusCreated { t.Fatalf("reverse expected 201, got %d", rr1.Code) }
+
+    // attempt reclassify -> 422 already_reversed
+    corr := map[string]any{
+        "user_id":  userID.String(),
+        "entry_id": er.ID,
+        "lines": []map[string]any{
+            {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 700},
+            {"account_id": income.ID.String(), "side": "credit", "amount_minor": 700},
+        },
+    }
+    cb, _ := json.Marshal(corr)
+    r2 := httptest.NewRequest(http.MethodPost, "/v1/entries/reclassify", bytes.NewReader(cb))
+    r2.Header.Set("Content-Type", "application/json")
+    rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r2)
+    if rr2.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", rr2.Code, rr2.Body.String()) }
+    var eresp errResp; _ = json.Unmarshal(rr2.Body.Bytes(), &eresp)
+    if eresp.Code != "already_reversed" { t.Fatalf("expected already_reversed, got %q", eresp.Code) }
+}
+
+func TestReverse_AlreadyReversed(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+    // create one entry
+    body := map[string]any{
+        "user_id":  userID.String(),
+        "date":     time.Now().UTC().Format(time.RFC3339),
+        "currency": "USD",
+        "memo":     "Test",
+        "category": "general",
+        "lines": []map[string]any{
+            {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 700},
+            {"account_id": income.ID.String(), "side": "credit", "amount_minor": 700},
+        },
+    }
+    b, _ := json.Marshal(body)
+    req := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder(); h.ServeHTTP(rec, req)
+    if rec.Code != http.StatusCreated { t.Fatalf("create entry expected 201, got %d", rec.Code) }
+    var er entryResp; _ = json.Unmarshal(rec.Body.Bytes(), &er)
+    rev := map[string]any{"user_id": userID.String(), "entry_id": er.ID}
+    rb, _ := json.Marshal(rev)
+    // first reverse
+    r1 := httptest.NewRequest(http.MethodPost, "/v1/entries/reverse", bytes.NewReader(rb))
+    r1.Header.Set("Content-Type", "application/json")
+    rr1 := httptest.NewRecorder(); h.ServeHTTP(rr1, r1)
+    if rr1.Code != http.StatusCreated { t.Fatalf("reverse expected 201, got %d", rr1.Code) }
+    // second reverse -> 422
+    r2 := httptest.NewRequest(http.MethodPost, "/v1/entries/reverse", bytes.NewReader(rb))
+    r2.Header.Set("Content-Type", "application/json")
+    rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r2)
+    if rr2.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", rr2.Code, rr2.Body.String()) }
+    var eresp errResp; _ = json.Unmarshal(rr2.Body.Bytes(), &eresp)
+    if eresp.Code != "already_reversed" { t.Fatalf("expected already_reversed, got %q", eresp.Code) }
 }
 
 func TestEntries_IdempotencyHeader(t *testing.T) {
@@ -197,7 +280,7 @@ func TestEntries_IdempotencyHeader(t *testing.T) {
     }
     b, _ := json.Marshal(body)
     // First request with Idempotency-Key
-    r1 := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r1 := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     r1.Header.Set("Content-Type", "application/json")
     r1.Header.Set("Idempotency-Key", "k-1")
     rr1 := httptest.NewRecorder(); h.ServeHTTP(rr1, r1)
@@ -205,7 +288,7 @@ func TestEntries_IdempotencyHeader(t *testing.T) {
     var e1 entryResp; _ = json.Unmarshal(rr1.Body.Bytes(), &e1)
 
     // Second request with same Idempotency-Key should return 200 and same ID
-    r2 := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r2 := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     r2.Header.Set("Content-Type", "application/json")
     r2.Header.Set("Idempotency-Key", "k-1")
     rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r2)
@@ -214,7 +297,7 @@ func TestEntries_IdempotencyHeader(t *testing.T) {
     if e1.ID != e2.ID { t.Fatalf("idempotency mismatch: %s vs %s", e1.ID, e2.ID) }
 
     // Without header should create a new entry (201) with a new ID
-    r3 := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r3 := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     r3.Header.Set("Content-Type", "application/json")
     rr3 := httptest.NewRecorder(); h.ServeHTTP(rr3, r3)
     if rr3.Code != http.StatusCreated { t.Fatalf("expected 201, got %d: %s", rr3.Code, rr3.Body.String()) }
@@ -235,7 +318,7 @@ func TestEntries_Validation422(t *testing.T) {
         },
     }
     b, _ := json.Marshal(body)
-    r := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String()) }
@@ -248,7 +331,7 @@ func TestEntries_Validation422(t *testing.T) {
         {"account_id": income.ID.String(), "side": "credit", "amount_minor": 0},
     }
     b, _ = json.Marshal(body)
-    r = httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r = httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
     rr = httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d", rr.Code) }
@@ -262,7 +345,7 @@ func TestEntries_Validation422(t *testing.T) {
         {"account_id": income.ID.String(), "side": "credit", "amount_minor": 100},
     }
     b, _ = json.Marshal(body)
-    r = httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r = httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
     rr = httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d", rr.Code) }
@@ -276,7 +359,7 @@ func TestEntries_Validation422(t *testing.T) {
         {"account_id": income.ID.String(), "side": "credit", "amount_minor": 90},
     }
     b, _ = json.Marshal(body)
-    r = httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r = httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
     rr = httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d", rr.Code) }
@@ -300,7 +383,7 @@ func TestEntries_Pagination(t *testing.T) {
             },
         }
         b, _ := json.Marshal(body)
-        r := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+        r := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
         r.Header.Set("Content-Type", "application/json")
         rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
         if rr.Code != http.StatusCreated { t.Fatalf("create failed: %d %s", rr.Code, rr.Body.String()) }
@@ -310,7 +393,7 @@ func TestEntries_Pagination(t *testing.T) {
     mk(base.Add(2*time.Second), 300)
 
     // page 1
-    r1 := httptest.NewRequest(http.MethodGet, "/entries?user_id="+userID.String()+"&limit=2", nil)
+    r1 := httptest.NewRequest(http.MethodGet, "/v1/entries?user_id="+userID.String()+"&limit=2", nil)
     rr1 := httptest.NewRecorder(); h.ServeHTTP(rr1, r1)
     if rr1.Code != http.StatusOK { t.Fatalf("list page1 expected 200, got %d", rr1.Code) }
     var p1 struct{ Items []entryResp `json:"items"`; Next *string `json:"next_cursor"` }
@@ -319,7 +402,7 @@ func TestEntries_Pagination(t *testing.T) {
     firstIDs := map[string]struct{}{p1.Items[0].ID: {}, p1.Items[1].ID: {}}
 
     // page 2
-    r2 := httptest.NewRequest(http.MethodGet, "/entries?user_id="+userID.String()+"&cursor="+*p1.Next, nil)
+    r2 := httptest.NewRequest(http.MethodGet, "/v1/entries?user_id="+userID.String()+"&cursor="+*p1.Next, nil)
     rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r2)
     if rr2.Code != http.StatusOK { t.Fatalf("list page2 expected 200, got %d", rr2.Code) }
     var p2 struct{ Items []entryResp `json:"items"`; Next *string `json:"next_cursor"` }
@@ -332,23 +415,23 @@ func TestNotFound_Standardized(t *testing.T) {
     _, h, userID, _, _ := setup(t)
     // entries/{id}
     rid := uuid.New().String()
-    r := httptest.NewRequest(http.MethodGet, "/entries/"+rid+"?user_id="+userID.String(), nil)
+    r := httptest.NewRequest(http.MethodGet, "/v1/entries/"+rid+"?user_id="+userID.String(), nil)
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusNotFound { t.Fatalf("expected 404, got %d", rr.Code) }
     var e errResp; _ = json.Unmarshal(rr.Body.Bytes(), &e)
     if e.Error != "not_found" || e.Code != "not_found" { t.Fatalf("unexpected 404 body: %+v", e) }
     // accounts/{id}
-    r = httptest.NewRequest(http.MethodGet, "/accounts/"+rid+"?user_id="+userID.String(), nil)
+    r = httptest.NewRequest(http.MethodGet, "/v1/accounts/"+rid+"?user_id="+userID.String(), nil)
     rr = httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusNotFound { t.Fatalf("expected 404 acc, got %d", rr.Code) }
     _ = json.Unmarshal(rr.Body.Bytes(), &e)
     if e.Error != "not_found" || e.Code != "not_found" { t.Fatalf("unexpected 404 body: %+v", e) }
     // balance
-    r = httptest.NewRequest(http.MethodGet, "/accounts/"+rid+"/balance?user_id="+userID.String(), nil)
+    r = httptest.NewRequest(http.MethodGet, "/v1/accounts/"+rid+"/balance?user_id="+userID.String(), nil)
     rr = httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusNotFound { t.Fatalf("expected 404 bal, got %d", rr.Code) }
     // ledger
-    r = httptest.NewRequest(http.MethodGet, "/accounts/"+rid+"/ledger?user_id="+userID.String(), nil)
+    r = httptest.NewRequest(http.MethodGet, "/v1/accounts/"+rid+"/ledger?user_id="+userID.String(), nil)
     rr = httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusNotFound { t.Fatalf("expected 404 led, got %d", rr.Code) }
 }
@@ -368,20 +451,20 @@ func TestLedger_BalanceConsistency(t *testing.T) {
             },
         }
         b, _ := json.Marshal(body)
-        r := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+        r := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
         r.Header.Set("Content-Type", "application/json")
         rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
         if rr.Code != http.StatusCreated { t.Fatalf("create failed: %d", rr.Code) }
     }
     mk(100); mk(200); mk(300)
     // balance
-    rb := httptest.NewRequest(http.MethodGet, "/accounts/"+cash.ID.String()+"/balance?user_id="+userID.String(), nil)
+    rb := httptest.NewRequest(http.MethodGet, "/v1/accounts/"+cash.ID.String()+"/balance?user_id="+userID.String(), nil)
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, rb)
     if rr.Code != http.StatusOK { t.Fatalf("balance expected 200, got %d", rr.Code) }
     var br struct{ BalanceMinor int64 `json:"balance_minor"` }
     _ = json.Unmarshal(rr.Body.Bytes(), &br)
     // ledger with limit large enough
-    rl := httptest.NewRequest(http.MethodGet, "/accounts/"+cash.ID.String()+"/ledger?user_id="+userID.String()+"&limit=100", nil)
+    rl := httptest.NewRequest(http.MethodGet, "/v1/accounts/"+cash.ID.String()+"/ledger?user_id="+userID.String()+"&limit=100", nil)
     rlr := httptest.NewRecorder(); h.ServeHTTP(rlr, rl)
     if rlr.Code != http.StatusOK { t.Fatalf("ledger expected 200, got %d", rlr.Code) }
     var l struct{ Items []struct{ Running int64 `json:"running_balance_minor"` } `json:"items"` }
@@ -405,7 +488,7 @@ func TestConcurrency_Smoke(t *testing.T) {
             },
         }
         b, _ := json.Marshal(body)
-        r := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+        r := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
         r.Header.Set("Content-Type", "application/json")
         rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
         if rr.Code != http.StatusCreated { t.Fatalf("create failed: %d", rr.Code) }
@@ -424,7 +507,7 @@ func TestConcurrency_Smoke(t *testing.T) {
     total := 0
     next := ""
     for {
-        url := "/entries?user_id="+userID.String()+"&limit=50"
+        url := "/v1/entries?user_id="+userID.String()+"&limit=50"
         if next != "" { url += "&cursor=" + next }
         r := httptest.NewRequest(http.MethodGet, url, nil)
         rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
@@ -453,7 +536,7 @@ func TestAccount_BalanceAndLedger(t *testing.T) {
             },
         }
         b, _ := json.Marshal(body)
-        r := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+        r := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
         r.Header.Set("Content-Type", "application/json")
         rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
         if rr.Code != http.StatusCreated { t.Fatalf("create failed: %d", rr.Code) }
@@ -483,7 +566,7 @@ func TestAccounts_InvalidAndSystemGuards(t *testing.T) {
     // missing fields -> 400
     bad := map[string]any{"user_id": userID.String(), "name": "", "currency": "", "type": "asset"}
     bb, _ := json.Marshal(bad)
-    r := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(bb))
+    r := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(bb))
     r.Header.Set("Content-Type", "application/json")
     rr := httptest.NewRecorder()
     h.ServeHTTP(rr, r)
@@ -492,7 +575,7 @@ func TestAccounts_InvalidAndSystemGuards(t *testing.T) {
     // create a normal account
     acct := map[string]any{"user_id": userID.String(), "name": "Sys", "currency": "USD", "type": "asset", "method": "Bank", "vendor": "X"}
     ab, _ := json.Marshal(acct)
-    r2 := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(ab))
+    r2 := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(ab))
     r2.Header.Set("Content-Type", "application/json")
     rr2 := httptest.NewRecorder()
     h.ServeHTTP(rr2, r2)
@@ -510,14 +593,14 @@ func TestAccounts_InvalidAndSystemGuards(t *testing.T) {
     // patch -> 403
     up := map[string]any{"name": "Noop"}
     ub, _ := json.Marshal(up)
-    p := httptest.NewRequest(http.MethodPatch, "/accounts/"+ar.ID+"?user_id="+userID.String(), bytes.NewReader(ub))
+    p := httptest.NewRequest(http.MethodPatch, "/v1/accounts/"+ar.ID+"?user_id="+userID.String(), bytes.NewReader(ub))
     p.Header.Set("Content-Type", "application/json")
     rp := httptest.NewRecorder()
     h.ServeHTTP(rp, p)
     if rp.Code != http.StatusForbidden { t.Fatalf("expected 403 for system account patch, got %d", rp.Code) }
 
     // delete -> 403
-    d := httptest.NewRequest(http.MethodDelete, "/accounts/"+ar.ID+"?user_id="+userID.String(), nil)
+    d := httptest.NewRequest(http.MethodDelete, "/v1/accounts/"+ar.ID+"?user_id="+userID.String(), nil)
     rd := httptest.NewRecorder()
     h.ServeHTTP(rd, d)
     if rd.Code != http.StatusForbidden { t.Fatalf("expected 403 for system account delete, got %d", rd.Code) }
@@ -536,7 +619,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
         "vendor":   "Monzo",
     }
     b, _ := json.Marshal(acct)
-    req := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(b))
+    req := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
     rec := httptest.NewRecorder()
     h.ServeHTTP(rec, req)
@@ -553,7 +636,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
 
     // duplicate path -> 409
     rec = httptest.NewRecorder()
-    reqDup := httptest.NewRequest(http.MethodPost, "/accounts", bytes.NewReader(b))
+    reqDup := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
     reqDup.Header.Set("Content-Type", "application/json")
     h.ServeHTTP(rec, reqDup)
     if rec.Code != http.StatusConflict {
@@ -561,7 +644,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     }
 
     // list with filters
-    r2 := httptest.NewRequest(http.MethodGet, "/accounts?user_id="+userID.String()+"&method=bank&vendor=monzo&type=asset", nil)
+    r2 := httptest.NewRequest(http.MethodGet, "/v1/accounts?user_id="+userID.String()+"&method=bank&vendor=monzo&type=asset", nil)
     rec2 := httptest.NewRecorder()
     h.ServeHTTP(rec2, r2)
     if rec2.Code != http.StatusOK {
@@ -578,7 +661,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     // patch (rename path + metadata)
     up := map[string]any{"method": "Banking", "vendor": "Monzo"}
     ub, _ := json.Marshal(up)
-    r3 := httptest.NewRequest(http.MethodPatch, "/accounts/"+ar.ID+"?user_id="+userID.String(), bytes.NewReader(ub))
+    r3 := httptest.NewRequest(http.MethodPatch, "/v1/accounts/"+ar.ID+"?user_id="+userID.String(), bytes.NewReader(ub))
     r3.Header.Set("Content-Type", "application/json")
     rec3 := httptest.NewRecorder()
     h.ServeHTTP(rec3, r3)
@@ -592,7 +675,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     }
 
     // delete (soft)
-    r4 := httptest.NewRequest(http.MethodDelete, "/accounts/"+ar.ID+"?user_id="+userID.String(), nil)
+    r4 := httptest.NewRequest(http.MethodDelete, "/v1/accounts/"+ar.ID+"?user_id="+userID.String(), nil)
     rec4 := httptest.NewRecorder()
     h.ServeHTTP(rec4, r4)
     if rec4.Code != http.StatusNoContent {

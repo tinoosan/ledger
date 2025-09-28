@@ -19,4 +19,6 @@ var (
     ErrInvalidAmount   = errors.New("invalid_amount")
     ErrMixedCurrency   = errors.New("mixed_currency")
     ErrUnbalancedEntry = errors.New("unbalanced_entry")
+    // ErrAlreadyReversed indicates an entry has already been reversed.
+    ErrAlreadyReversed = errors.New("already_reversed")
 )

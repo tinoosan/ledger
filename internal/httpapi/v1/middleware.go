@@ -1,5 +1,5 @@
 // Package httpapi contains HTTP handlers and middleware.
-package httpapi
+package v1
 
 import (
     "context"

@@ -1,4 +1,4 @@
-package httpapi
+package v1
 
 import "github.com/tinoosan/ledger/internal/storage/memory"
 
@@ -8,4 +8,3 @@ var (
     _ EntryReader       = (*memory.Store)(nil)
     _ IdempotencyStore  = (*memory.Store)(nil)
 )
-

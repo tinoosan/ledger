@@ -1,5 +1,5 @@
 // Account handlers: CRUD-lite (create, list, update, deactivate).
-package httpapi
+package v1
 
 import (
     "net/http"

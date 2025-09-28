@@ -1,5 +1,5 @@
 // Account balance and ledger endpoints. Running balance is computed per page.
-package httpapi
+package v1
 
 import (
     "encoding/base64"

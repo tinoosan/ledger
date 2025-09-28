@@ -22,6 +22,7 @@ type Repo interface {
 // Writer defines write operations needed by the service.
 type Writer interface {
     CreateJournalEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error)
+    UpdateJournalEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error)
 }
 
 // Service exposes validation and creation of journal entries and reporting helpers.
@@ -147,6 +148,9 @@ func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, d
     if orig.UserID != userID {
         return ledger.JournalEntry{}, errs.ErrForbidden
     }
+    if orig.IsReversed {
+        return ledger.JournalEntry{}, errs.ErrAlreadyReversed
+    }
     rid := uuid.New()
     lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(orig.Lines.ByID))}
     for _, ln := range orig.Lines.ByID {
@@ -165,7 +169,12 @@ func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, d
         Category: orig.Category,
         Lines:    lines,
     }
-    return s.writer.CreateJournalEntry(ctx, e)
+    rev, err := s.writer.CreateJournalEntry(ctx, e)
+    if err != nil { return ledger.JournalEntry{}, err }
+    // Mark original as reversed
+    orig.IsReversed = true
+    if _, err := s.writer.UpdateJournalEntry(ctx, orig); err != nil { return ledger.JournalEntry{}, err }
+    return rev, nil
 }
 
 // Reclassify posts a reversing entry for the original, then a correcting entry with provided lines.
@@ -177,6 +186,7 @@ func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, dat
     orig, err := s.repo.GetEntry(ctx, userID, entryID)
     if err != nil { return ledger.JournalEntry{}, err }
     if orig.UserID != userID { return ledger.JournalEntry{}, errs.ErrForbidden }
+    if orig.IsReversed { return ledger.JournalEntry{}, errs.ErrAlreadyReversed }
 
     // 1) reversing entry
     if _, err := s.ReverseEntry(ctx, userID, entryID, date); err != nil { return ledger.JournalEntry{}, err }

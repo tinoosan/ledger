@@ -1,5 +1,5 @@
 // Entry fetch helper endpoints.
-package httpapi
+package v1
 
 import (
     "net/http"

@@ -405,6 +405,12 @@ components:
         currency: { type: string }
         memo: { type: string }
         category: { $ref: '#/components/schemas/Category' }
+        metadata:
+          type: object
+          additionalProperties: { type: string }
+        is_reversed:
+          type: boolean
+          description: True if the entry has been reversed
         lines:
           type: array
           items: { $ref: '#/components/schemas/JournalLineResponse' }

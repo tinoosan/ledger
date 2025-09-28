@@ -1,5 +1,5 @@
 // Entry handlers: creation, reversal, listing and reporting endpoints.
-package httpapi
+package v1
 
 import (
     "encoding/base64"
@@ -12,6 +12,8 @@ import (
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
     "github.com/govalues/money"
+    "errors"
+    "github.com/tinoosan/ledger/internal/errs"
 )
 
 func (s *Server) postEntry(w http.ResponseWriter, r *http.Request) {
@@ -58,8 +60,12 @@ func (s *Server) reverseEntry(w http.ResponseWriter, r *http.Request) {
     }
     saved, err := s.svc.ReverseEntry(r.Context(), req.UserID, req.EntryID, date)
     if err != nil {
-        toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()})
-        return
+        // Map known sentinel errors
+        if errors.Is(err, errs.ErrAlreadyReversed) { unprocessable(w, "already_reversed", "already_reversed"); return }
+        if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid"); return }
+        if errors.Is(err, errs.ErrForbidden) { forbidden(w, "forbidden"); return }
+        if errors.Is(err, errs.ErrNotFound) { notFound(w); return }
+        badRequest(w, err.Error()); return
     }
     toJSON(w, http.StatusCreated, toEntryResponse(saved))
 }
@@ -209,6 +215,7 @@ func toEntryResponse(entry ledger.JournalEntry) entryResponse {
         Memo:          entry.Memo,
         Category:      entry.Category,
         Metadata:      entry.Metadata,
+        IsReversed:    entry.IsReversed,
         Lines:         lines,
     }
 }

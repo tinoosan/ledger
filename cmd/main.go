@@ -11,7 +11,7 @@ import (
     "log/slog"
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
-    "github.com/tinoosan/ledger/internal/httpapi"
+    httpapi "github.com/tinoosan/ledger/internal/httpapi/v1"
     "github.com/tinoosan/ledger/internal/storage/memory"
 )
 
