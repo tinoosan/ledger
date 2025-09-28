@@ -2,7 +2,6 @@ package meta
 
 import (
     "bytes"
-    "database/sql/driver"
     "encoding/json"
     "errors"
     "sort"
@@ -97,29 +96,3 @@ func (m *Metadata) UnmarshalJSON(b []byte) error {
     *m = New(tmp)
     return nil
 }
-
-// SQL adapters
-func (m Metadata) Value() (driver.Value, error) {
-    b, err := m.MarshalStableJSON()
-    if err != nil { return nil, err }
-    return b, nil
-}
-
-func (m *Metadata) Scan(src any) error {
-    switch v := src.(type) {
-    case nil:
-        *m = Metadata{}
-        return nil
-    case []byte:
-        var tmp map[string]string
-        if len(v) == 0 { *m = Metadata{}; return nil }
-        if err := json.Unmarshal(v, &tmp); err != nil { return err }
-        *m = New(tmp)
-        return nil
-    case string:
-        return m.Scan([]byte(v))
-    default:
-        return errors.New("unsupported Scan type for Metadata")
-    }
-}
-

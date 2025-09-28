@@ -45,10 +45,4 @@ func TestStableJSONAndRoundtrip(t *testing.T) {
     if err := unmarshaled.Validate(); err != nil { t.Fatalf("validate roundtrip: %v", err) }
 }
 
-func TestSQLAdapters(t *testing.T) {
-    metaMap := New(map[string]string{"a":"1"})
-    sqlValue, err := metaMap.Value(); if err != nil { t.Fatalf("Value: %v", err) }
-    var scanned Metadata
-    if err := scanned.Scan(sqlValue); err != nil { t.Fatalf("Scan: %v", err) }
-    if scanned["a"] != "1" { t.Fatalf("scan mismatch: %+v", scanned) }
-}
+// SQL adapters removed; no tests needed.
