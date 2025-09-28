@@ -182,6 +182,46 @@ func TestEntries_GetAndIdempotency(t *testing.T) {
     // idempotency endpoint removed for now
 }
 
+func TestEntries_IdempotencyHeader(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+    body := map[string]any{
+        "user_id":  userID.String(),
+        "date":     time.Now().UTC().Format(time.RFC3339),
+        "currency": "USD",
+        "memo":     "Test",
+        "category": "general",
+        "lines": []map[string]any{
+            {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 700},
+            {"account_id": income.ID.String(), "side": "credit", "amount_minor": 700},
+        },
+    }
+    b, _ := json.Marshal(body)
+    // First request with Idempotency-Key
+    r1 := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r1.Header.Set("Content-Type", "application/json")
+    r1.Header.Set("Idempotency-Key", "k-1")
+    rr1 := httptest.NewRecorder(); h.ServeHTTP(rr1, r1)
+    if rr1.Code != http.StatusCreated { t.Fatalf("expected 201, got %d: %s", rr1.Code, rr1.Body.String()) }
+    var e1 entryResp; _ = json.Unmarshal(rr1.Body.Bytes(), &e1)
+
+    // Second request with same Idempotency-Key should return 200 and same ID
+    r2 := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r2.Header.Set("Content-Type", "application/json")
+    r2.Header.Set("Idempotency-Key", "k-1")
+    rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r2)
+    if rr2.Code != http.StatusOK { t.Fatalf("expected 200, got %d: %s", rr2.Code, rr2.Body.String()) }
+    var e2 entryResp; _ = json.Unmarshal(rr2.Body.Bytes(), &e2)
+    if e1.ID != e2.ID { t.Fatalf("idempotency mismatch: %s vs %s", e1.ID, e2.ID) }
+
+    // Without header should create a new entry (201) with a new ID
+    r3 := httptest.NewRequest(http.MethodPost, "/entries", bytes.NewReader(b))
+    r3.Header.Set("Content-Type", "application/json")
+    rr3 := httptest.NewRecorder(); h.ServeHTTP(rr3, r3)
+    if rr3.Code != http.StatusCreated { t.Fatalf("expected 201, got %d: %s", rr3.Code, rr3.Body.String()) }
+    var e3 entryResp; _ = json.Unmarshal(rr3.Body.Bytes(), &e3)
+    if e3.ID == e1.ID { t.Fatalf("expected new entry without idempotency header") }
+}
+
 func TestEntries_Validation422(t *testing.T) {
     _, h, userID, cash, income := setup(t)
     // too few lines

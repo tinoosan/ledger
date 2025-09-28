@@ -94,6 +94,26 @@ curl -sS -X POST http://localhost:8080/entries \
       { "account_id": "<income_account_id>", "side": "credit", "amount_minor": 1500 }
     ]
   }'
+
+Create an entry with an idempotency header (safe retries):
+
+```
+curl -sS -X POST http://localhost:8080/entries \
+  -H 'Content-Type: application/json' \
+  -H 'Idempotency-Key: <opaque-key-from-client>' \
+  -d '{
+    "user_id": "<user_id>",
+    "date": "2025-09-27T12:00:00Z",
+    "currency": "USD",
+    "memo": "Lunch",
+    "category": "eating_out",
+    "lines": [
+      { "account_id": "<cash_account_id>",   "side": "debit",  "amount_minor": 1500 },
+      { "account_id": "<income_account_id>", "side": "credit", "amount_minor": 1500 }
+    ]
+  }'
+```
+If the same `Idempotency-Key` is reused for the same `user_id`, the server responds `200 OK` with the original entry instead of creating a duplicate.
 ```
 
 Reverse an entry:
