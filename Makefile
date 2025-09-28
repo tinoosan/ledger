@@ -1,4 +1,4 @@
-.PHONY: dev build dev-jq dev-jq-save api-validate api-docs api-docs-stop
+.PHONY: dev build dev-jq dev-jq-save api-validate api-docs api-docs-stop image run stop logs
 
 dev:
 	@which air >/dev/null 2>&1 || (echo "air not installed. Install: go install github.com/air-verse/air@latest" && exit 1)
@@ -16,6 +16,33 @@ dev-jq-save:
 
 build:
 	go build ./...
+
+# -------- Docker helpers --------
+# Defaults can be overridden: make image IMAGE=ghcr.io/you/ledger:dev
+IMAGE ?= tinosan/ledger:dev
+CONTAINER ?= ledger-api
+PORT ?= 8080
+
+image:
+	@command -v docker >/dev/null 2>&1 || { echo "docker not installed"; exit 1; }
+	docker build -t $(IMAGE) .
+
+run:
+	@command -v docker >/dev/null 2>&1 || { echo "docker not installed"; exit 1; }
+	- docker rm -f $(CONTAINER) >/dev/null 2>&1 || true
+	docker run --name $(CONTAINER) -d -p $(PORT):8080 \
+	  -e LOG_FORMAT=$${LOG_FORMAT:-json} -e LOG_LEVEL=$${LOG_LEVEL:-INFO} \
+	  $(IMAGE)
+	@echo "Container $(CONTAINER) running on http://localhost:$(PORT)"
+
+stop:
+	@command -v docker >/dev/null 2>&1 || { echo "docker not installed"; exit 0; }
+	- docker rm -f $(CONTAINER) >/dev/null 2>&1 || true
+	@echo "Container $(CONTAINER) stopped"
+
+logs:
+	@command -v docker >/dev/null 2>&1 || { echo "docker not installed"; exit 1; }
+	docker logs -f $(CONTAINER)
 
 # Validate OpenAPI using openapitools/openapi-generator-cli (requires Docker)
 api-validate:

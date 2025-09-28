@@ -1,6 +1,6 @@
 # Multi-stage build for the ledger service
 # Stage 1: build static binary
-FROM golang:1.22-alpine AS builder
+FROM golang:1.24.4-alpine AS builder
 
 WORKDIR /src
 
