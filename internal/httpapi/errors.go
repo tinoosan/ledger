@@ -3,6 +3,8 @@ package httpapi
 import (
     "net/http"
     "strings"
+    "errors"
+    "github.com/tinoosan/ledger/internal/errs"
 )
 
 // errorResponse is the standard error payload for the API.
@@ -27,17 +29,27 @@ func unprocessable(w http.ResponseWriter, msg, code string) {
 func mapValidationError(err error) (code, msg string) {
     if err == nil { return "", "" }
     msg = err.Error()
-    code = "validation_error"
     switch {
-    case msg == "at least 2 lines":
-        code = "too_few_lines"
-    case strings.Contains(msg, "amount must be > 0"):
-        code = "invalid_amount"
-    case strings.Contains(msg, "currency mismatch"):
-        code = "mixed_currency"
-    case msg == "sum(debits) must equal sum(credits)":
-        code = "unbalanced_entry"
+    case errors.Is(err, errs.ErrTooFewLines):
+        return "too_few_lines", msg
+    case errors.Is(err, errs.ErrInvalidAmount):
+        return "invalid_amount", msg
+    case errors.Is(err, errs.ErrMixedCurrency):
+        return "mixed_currency", msg
+    case errors.Is(err, errs.ErrUnbalancedEntry):
+        return "unbalanced_entry", msg
+    default:
+        code := "validation_error"
+        switch {
+        case strings.Contains(msg, "amount must be > 0"):
+            code = "invalid_amount"
+        case strings.Contains(msg, "currency mismatch"):
+            code = "mixed_currency"
+        case strings.Contains(msg, "sum(debits) must equal sum(credits)"):
+            code = "unbalanced_entry"
+        case strings.Contains(msg, "at least 2 lines"):
+            code = "too_few_lines"
+        }
+        return code, msg
     }
-    return code, msg
 }
-

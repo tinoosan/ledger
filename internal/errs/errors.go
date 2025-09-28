@@ -14,4 +14,9 @@ var (
     ErrSystemAccount = errors.New("system_account")
     // ErrImmutable indicates an attempt to change immutable fields
     ErrImmutable = errors.New("immutable")
+    // Journal/domain validation errors
+    ErrTooFewLines     = errors.New("too_few_lines")
+    ErrInvalidAmount   = errors.New("invalid_amount")
+    ErrMixedCurrency   = errors.New("mixed_currency")
+    ErrUnbalancedEntry = errors.New("unbalanced_entry")
 )

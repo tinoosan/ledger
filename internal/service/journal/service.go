@@ -50,7 +50,7 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
         return errs.ErrInvalid
     }
     if len(entry.Lines.ByID) < 2 {
-        return errors.New("at least 2 lines")
+        return errs.ErrTooFewLines
     }
 
     ids := make([]uuid.UUID, 0, len(entry.Lines.ByID))
@@ -62,7 +62,7 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
         }
         units, _ := line.Amount.MinorUnits()
         if units <= 0 {
-            return fieldErr(i, "amount must be > 0")
+            return errs.ErrInvalidAmount
         }
         switch line.Side {
         case ledger.SideDebit:
@@ -76,7 +76,7 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
         i++
     }
     if sumDebits != sumCredits {
-        return errors.New("sum(debits) must equal sum(credits)")
+        return errs.ErrUnbalancedEntry
     }
 
     accMap, err := s.repo.AccountsByIDs(ctx, entry.UserID, ids)
@@ -96,7 +96,7 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
             return fieldErr(i, "account does not belong to user")
         }
         if acc.Currency != entry.Currency {
-            return fieldErr(i, "account currency mismatch")
+            return errs.ErrMixedCurrency
         }
         i++
     }

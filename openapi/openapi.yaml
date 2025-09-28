@@ -515,3 +515,15 @@ components:
         immutable:
           summary: Attempt to change immutable field(s)
           value: { error: immutable, code: immutable }
+        too_few_lines:
+          summary: Entry has fewer than 2 lines
+          value: { error: too_few_lines, code: too_few_lines }
+        invalid_amount:
+          summary: A line has non-positive amount
+          value: { error: invalid_amount, code: invalid_amount }
+        mixed_currency:
+          summary: Line account currency does not match entry currency
+          value: { error: mixed_currency, code: mixed_currency }
+        unbalanced_entry:
+          summary: Sum of debits and credits does not match
+          value: { error: unbalanced_entry, code: unbalanced_entry }
