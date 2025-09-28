@@ -13,7 +13,7 @@ import (
 )
 
 // updateAccount handles PATCH /accounts/{id}
-// Allows updating name, method, vendor, and metadata. Enforces immutability on type/currency.
+// Allows updating name, group, vendor, and metadata. Enforces immutability on type/currency.
 func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
     if !requireJSON(w, r) { return }
     idStr := chi.URLParam(r, "id")

@@ -244,7 +244,7 @@ func normalizedPathString(a ledger.Account) string {
 // ErrPathExists indicates an account with the same normalized path already exists for the user.
 var ErrPathExists = errors.New("account path already exists for user")
 
-// Update applies allowed changes to name/method/vendor/metadata using a complete domain account.
+// Update applies allowed changes to name/group/vendor/metadata using a complete domain account.
 func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account, error) {
     if a.UserID == uuid.Nil || a.ID == uuid.Nil {
         return ledger.Account{}, errs.ErrInvalid

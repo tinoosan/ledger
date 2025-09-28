@@ -84,7 +84,7 @@ type Account struct {
     Active   bool
 }
 
-// Path returns a colon-separated identifier for the account: Type:Method:Vendor.
+// Path returns a colon-separated identifier for the account: Type:Group:Vendor.
 // Example: assets:bank:monzo
 func (a Account) Path() string {
     // Temporary: vendor slugging handled later; for now lowercase vendor
@@ -104,7 +104,6 @@ type JournalEntry struct {
     Currency      string
     Memo          string
     Category      Category
-    ClientEntryID string
     // Metadata holds additional key-value attributes for the entry.
     Metadata      meta.Metadata `json:"metadata,omitempty"`
     // IsReversed marks that this entry has been reversed.

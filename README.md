@@ -34,10 +34,10 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
   - `POST /entries/reverse` — reverse an existing entry (flipped lines)
   
 - Accounts
-  - `GET /accounts?user_id=...` — list (filters: name, currency, method, vendor, type, system, active)
+- `GET /accounts?user_id=...` — list (filters: name, currency, group, vendor, type, system, active)
   - `POST /accounts` — create
   - `POST /v1/accounts/batch` — create many in one call (canonical; requires Idempotency-Key)
-  - `PATCH /accounts/{id}?user_id=...` — update name/method/vendor/metadata
+- `PATCH /accounts/{id}?user_id=...` — update name/group/vendor/metadata
   - `DELETE /accounts/{id}?user_id=...` — soft delete (active=false)
   - `GET /accounts/{id}/balance?user_id=...[&as_of=...]` — signed balance (minor units)
   - `GET /accounts/{id}/ledger?user_id=...[&from=&to=&limit=&cursor=]` — paginated feed with running balance
@@ -52,7 +52,7 @@ See OpenAPI for detailed request/response schemas.
 - Immutable identity
   - `id`, `type` (asset/liability/equity/revenue/expense), `currency` never change
 - Editable descriptive fields
-  - `name`, path (`type:method:vendor` via `method` + `vendor`), and `metadata`
+- `name`, path (`type:group:vendor` via `group` + `vendor`), and `metadata`
   - Path is normalized lowercase and unique per user (per currency)
   - OpeningBalances has path `equity:openingbalances`; vendor is `System`
 - Soft deletes only
@@ -141,7 +141,7 @@ curl -sS -X POST http://localhost:8080/v1/accounts \
     "name": "Monzo Current",
     "currency": "USD",
     "type": "asset",
-    "method": "Bank",
+    "group": "Bank",
     "vendor": "Monzo",
     "metadata": { "bank.iban": "DE89 3704 0044 0532 0130 00" }
   }'
@@ -174,8 +174,8 @@ curl -sS -X POST http://localhost:8080/v1/accounts/batch \
   -d '{
     "user_id": "<user_id>",
     "accounts": [
-      {"name": "Groceries",  "currency": "USD", "type": "expense", "method": "Category", "vendor": "General", "metadata": {"report.tag": "food"}},
-      {"name": "Eating Out", "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"}
+      {"name": "Groceries",  "currency": "USD", "type": "expense", "group": "Category", "vendor": "General", "metadata": {"report.tag": "food"}},
+      {"name": "Eating Out", "currency": "USD", "type": "expense", "group": "Category", "vendor": "General"}
     ]
   }'
 ```
@@ -202,6 +202,10 @@ curl -sS "http://localhost:8080/v1/accounts/opening-balances?user_id=<user_id>&c
 - Tests: `go test ./...`
 - Swagger UI: `make api-docs` → http://localhost:8081
 - Validate spec: `make api-validate` (Docker) or `./tmp/bin/validate openapi/openapi.yaml`
+- Local stack (API + Postgres):
+  - `make compose-up` → API at http://localhost:8080
+  - `make compose-logs` → follow logs
+  - `make compose-down` → stop and remove volumes
 
 ---
 
@@ -248,3 +252,17 @@ curl -sS -X POST http://localhost:8080/v1/entries/batch \
 
 - `meta.Metadata` validates keys, values, size; `Set` is best-effort; call `Validate()` before persisting
 ```
+
+## Postgres Preparation
+
+- Storage package: `internal/storage/postgres` implements the same interfaces as the in-memory store (account + entry readers/writers, idempotency, and batch transactions).
+- Schema & migrations: see `db/migrations/0001_init.sql` and `db/README.md` for a minimal, invariant-enforcing schema (users, accounts, entries, entry_lines, entry_idempotency) plus indexes for ordered scans `(user_id, date, id)`.
+- Local DB helpers: `make db-up`, `make db-migrate`, `make db-down` run a Postgres 16 container and apply the initial migration.
+- Configuration: when you’re ready to wire Postgres in `cmd/main.go`, read `DATABASE_URL` (e.g., `postgresql://user:pass@host:5432/db?sslmode=disable`) and build the server using the Postgres store instead of memory.
+- Money handling: lines persist `amount_minor` (bigint). Code reconstructs `money.Amount` using the entry currency to avoid float errors.
+- Idempotency: `(user_id, key)` unique mapping to `entry_id` with `ON CONFLICT DO NOTHING` for safe retries.
+- Uniqueness: DB enforces uniqueness over `(user_id, lower(group), lower(vendor), type, upper(currency))`. The service continues to slugify/normalize for paths.
+- Transactions: batch endpoints (accounts and entries) leverage a store `BeginTx` that wraps `pgx.Tx` to insert all-or-nothing.
+
+Wiring example (later):
+- Detect `DATABASE_URL`; if set, initialize `postgres.Open(ctx, dsn)` and pass it anywhere `store` is used today. Keep memory as the default for dev.

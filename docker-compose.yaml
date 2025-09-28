@@ -1,0 +1,46 @@
+name: ledger
+
+services:
+  db:
+    image: postgres:16
+    container_name: ledger-pg
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ledger
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Run initial migration on first init of the data directory
+      - ./db/migrations/0001_init.sql:/docker-entrypoint-initdb.d/0001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 15
+
+  api:
+    build: .
+    image: tinosan/ledger:dev
+    container_name: ledger-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      # Internal DNS name 'db' from this compose network
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/ledger?sslmode=disable
+      DEV_SEED: "true"
+      LOG_FORMAT: json
+      LOG_LEVEL: INFO
+    ports:
+      - "8080:8080"
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+volumes:
+  pgdata:
+    driver: local

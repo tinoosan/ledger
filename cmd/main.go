@@ -13,6 +13,7 @@ import (
     "github.com/tinoosan/ledger/internal/ledger"
     httpapi "github.com/tinoosan/ledger/internal/httpapi/v1"
     "github.com/tinoosan/ledger/internal/storage/memory"
+    pgstore "github.com/tinoosan/ledger/internal/storage/postgres"
 )
 
 func main() {
@@ -23,22 +24,55 @@ func main() {
     logger := buildLoggerFromEnv()
     slog.SetDefault(logger)
 
-    // In-memory repository for now
-    store := memory.New()
+    var srvMux http.Handler
+    var closeFn func()
 
-    // Quick dev seeder: one user + two USD accounts + system OpeningBalances
-    user := ledger.User{ID: uuid.New()}
-    store.SeedUser(user)
-    // System account reserved for opening balances
-    opening := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Opening Balances", Currency: "GBP", Type: ledger.AccountTypeEquity, Group: "opening_balances", Vendor: "System", System: true, Active: true}
-    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "GBP", Type: ledger.AccountTypeAsset, Group: "cash", Vendor: "Wallet", Active: true}
-    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "GBP", Type: ledger.AccountTypeRevenue, Group: "salary", Vendor: "Employer", Active: true}
-    store.SeedAccount(opening)
-    store.SeedAccount(cash)
-    store.SeedAccount(income)
-    logger.Info("DEV seed", "user_id", user.ID.String(), "opening_balances_account_id", opening.ID.String(), "cash_account_id", cash.ID.String(), "income_account_id", income.ID.String())
-
-    srvMux := httpapi.New(store, store, store, store, store, store, store, logger).Handler()
+    if dsn := strings.TrimSpace(os.Getenv("DATABASE_URL")); dsn != "" {
+        // Use Postgres store when DATABASE_URL is provided
+        pg, err := pgstore.Open(ctx, dsn)
+        if err != nil {
+            logger.Error("failed to connect to postgres", "err", err)
+            os.Exit(1)
+        }
+        closeFn = func() { pg.Close() }
+        // Optional dev seed for compose/local
+        if dev := strings.ToLower(strings.TrimSpace(os.Getenv("DEV_SEED"))); dev == "1" || dev == "true" || dev == "yes" {
+            user, accs, err := pg.SeedDev(ctx)
+            if err != nil {
+                logger.Error("dev seed failed", "err", err)
+            } else {
+                // log main IDs for quick testing
+                ids := map[string]string{}
+                for _, a := range accs {
+                    switch {
+                    case a.System && strings.EqualFold(a.Group, "opening_balances"):
+                        ids["opening_balances_account_id"] = a.ID.String()
+                    case a.Type == ledger.AccountTypeAsset && strings.EqualFold(a.Group, "cash"):
+                        ids["cash_account_id"] = a.ID.String()
+                    case a.Type == ledger.AccountTypeRevenue && strings.EqualFold(a.Group, "salary"):
+                        ids["income_account_id"] = a.ID.String()
+                    }
+                }
+                logger.Info("DEV seed (postgres)", "user_id", user.ID.String(), "ids", ids)
+            }
+        }
+        srvMux = httpapi.New(pg, pg, pg, pg, pg, pg, pg, logger).Handler()
+        logger.Info("storage backend: postgres")
+    } else {
+        // Default to in-memory store with a small dev seed
+        store := memory.New()
+        user := ledger.User{ID: uuid.New()}
+        store.SeedUser(user)
+        opening := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Opening Balances", Currency: "GBP", Type: ledger.AccountTypeEquity, Group: "opening_balances", Vendor: "System", System: true, Active: true}
+        cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "GBP", Type: ledger.AccountTypeAsset, Group: "cash", Vendor: "Wallet", Active: true}
+        income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "GBP", Type: ledger.AccountTypeRevenue, Group: "salary", Vendor: "Employer", Active: true}
+        store.SeedAccount(opening)
+        store.SeedAccount(cash)
+        store.SeedAccount(income)
+        logger.Info("DEV seed", "user_id", user.ID.String(), "opening_balances_account_id", opening.ID.String(), "cash_account_id", cash.ID.String(), "income_account_id", income.ID.String())
+        srvMux = httpapi.New(store, store, store, store, store, store, store, logger).Handler()
+        logger.Info("storage backend: memory")
+    }
 
 	srv := &http.Server{
 		Addr:              ":8080",
@@ -67,6 +101,7 @@ func main() {
     case err := <-errCh:
         logger.Error("server error", "err", err)
     }
+    if closeFn != nil { closeFn() }
 }
  
 // parseLogLevel maps env values to slog.Leveler
