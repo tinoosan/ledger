@@ -134,6 +134,11 @@ func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Ac
         if acc.Metadata == nil { acc.Metadata = map[string]string{} }
         acc.Metadata["active"] = "true"
     }
+    // Default active=true for non-system accounts as well
+    if !acc.System {
+        if acc.Metadata == nil { acc.Metadata = map[string]string{} }
+        if _, ok := acc.Metadata["active"]; !ok { acc.Metadata["active"] = "true" }
+    }
     return s.writer.CreateAccount(ctx, acc)
 }
 
