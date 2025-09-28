@@ -135,16 +135,12 @@ func (s *Store) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.Jou
 }
 
 // EntryByID returns a single entry for a user.
-func (s *Store) EntryByID(_ context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error) {
+// GetEntry returns a single entry for a user.
+func (s *Store) GetEntry(_ context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error) {
     s.mu.RLock(); defer s.mu.RUnlock()
     e, ok := s.entries[entryID]
     if !ok || e.UserID != userID { return ledger.JournalEntry{}, errs.ErrNotFound }
     return cloneEntry(*e), nil
-}
-
-// GetEntry is an alias to EntryByID to satisfy httpapi.EntryReader.
-func (s *Store) GetEntry(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error) {
-    return s.EntryByID(ctx, userID, entryID)
 }
 
 // EntryByClientID resolves entry via client entry id.
@@ -178,16 +174,12 @@ func (s *Store) CreateAccount(_ context.Context, a ledger.Account) (ledger.Accou
 }
 
 // AccountByID returns a user's account by ID.
-func (s *Store) AccountByID(_ context.Context, userID, accountID uuid.UUID) (ledger.Account, error) {
+// GetAccount returns a user's account by ID.
+func (s *Store) GetAccount(_ context.Context, userID, accountID uuid.UUID) (ledger.Account, error) {
     s.mu.RLock(); defer s.mu.RUnlock()
     a, ok := s.accounts[accountID]
     if !ok || a.UserID != userID { return ledger.Account{}, errs.ErrNotFound }
     return cloneAccount(a), nil
-}
-
-// GetAccount is an alias to AccountByID to satisfy httpapi.AccountReader.
-func (s *Store) GetAccount(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error) {
-    return s.AccountByID(ctx, userID, accountID)
 }
 
 // UpdateAccount persists changes to an account.
