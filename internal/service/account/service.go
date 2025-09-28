@@ -10,6 +10,7 @@ import (
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/ledger"
     "github.com/tinoosan/ledger/internal/errs"
+    "github.com/tinoosan/ledger/internal/slug"
 )
 
 type Repo interface {
@@ -91,6 +92,7 @@ func (s *service) ValidateCreate(account ledger.Account) error {
     if account.Group == "" {
         return errors.New("group is required")
     }
+    if !slug.IsSlug(strings.ToLower(account.Group)) { return errors.New("invalid group slug") }
     if account.Vendor == "" {
         return errors.New("vendor is required")
     }
@@ -235,7 +237,8 @@ func normalizedPathString(a ledger.Account) string {
     if a.Type == ledger.AccountTypeEquity && strings.EqualFold(a.Group, "opening_balances") {
         return "equity:opening_balances"
     }
-    return string(a.Type) + ":" + strings.ToLower(a.Group) + ":" + strings.ToLower(a.Vendor)
+    vendorSlug := slug.Slugify(a.Vendor)
+    return strings.ToLower(string(a.Type)) + ":" + strings.ToLower(a.Group) + ":" + vendorSlug
 }
 
 // ErrPathExists indicates an account with the same normalized path already exists for the user.
