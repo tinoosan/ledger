@@ -707,3 +707,30 @@ func TestOpeningBalances_EndpointCreatesPerCurrency(t *testing.T) {
     rr2 := httptest.NewRecorder(); h.ServeHTTP(rr2, r)
     if rr2.Code != http.StatusOK { t.Fatalf("expected 200, got %d", rr2.Code) }
 }
+
+func TestAccounts_BatchCreate_MixedResults(t *testing.T) {
+    _, h, userID, _, _ := setup(t)
+
+    // First item valid, second item duplicate (same path/currency), third invalid (missing fields)
+    items := []map[string]any{
+        {"user_id": userID.String(), "name": "Wallet 1", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket"},
+        {"user_id": userID.String(), "name": "Wallet 2", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket"},
+        {"user_id": userID.String(), "name": "", "currency": "", "type": "asset", "method": "", "vendor": ""},
+    }
+    b, _ := json.Marshal(items)
+    r := httptest.NewRequest(http.MethodPost, "/v1/accounts/batch", bytes.NewReader(b))
+    r.Header.Set("Content-Type", "application/json")
+    rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
+    if rr.Code != http.StatusOK { t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String()) }
+    var res []struct {
+        Index   int        `json:"index"`
+        Account *acctResp  `json:"account"`
+        Error   string     `json:"error"`
+        Code    string     `json:"code"`
+    }
+    _ = json.Unmarshal(rr.Body.Bytes(), &res)
+    if len(res) != 3 { t.Fatalf("expected 3 results, got %d", len(res)) }
+    if res[0].Account == nil || res[0].Error != "" { t.Fatalf("first should succeed: %+v", res[0]) }
+    if res[1].Account != nil || res[1].Code == "" { t.Fatalf("second should fail with conflict: %+v", res[1]) }
+    if res[2].Account != nil || res[2].Code != "invalid" { t.Fatalf("third should be invalid: %+v", res[2]) }
+}

@@ -217,6 +217,29 @@ paths:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
+  /accounts/batch:
+    post:
+      summary: Batch create accounts
+      operationId: batchCreateAccounts
+      tags: [accounts]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items: { $ref: '#/components/schemas/AccountRequest' }
+      responses:
+        '200':
+          description: Per-item results
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/BatchAccountItem'
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
   /accounts/opening-balances:
     get:
       summary: Get or create the Opening Balances account for a currency
@@ -476,6 +499,14 @@ components:
                 type: string
             active:
               type: boolean
+
+    BatchAccountItem:
+      type: object
+      properties:
+        index: { type: integer }
+        account: { $ref: '#/components/schemas/AccountResponse' }
+        error: { type: string }
+        code: { type: string }
             system:
               type: boolean
 

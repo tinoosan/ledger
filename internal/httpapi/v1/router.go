@@ -62,6 +62,7 @@ func (s *Server) routes() {
     s.rt.With(s.validateTrialBalance()).Get("/v1/trial-balance", s.trialBalance)
     // Accounts (v1)
     s.rt.With(s.validatePostAccount()).Post("/v1/accounts", s.postAccount)
+    s.rt.Post("/v1/accounts/batch", s.postAccountsBatch)
     s.rt.With(s.validateListAccounts()).Get("/v1/accounts", s.listAccounts)
     s.rt.Get("/v1/accounts/{id}", s.getAccount)
     s.rt.Get("/v1/accounts/{id}/balance", s.getAccountBalance)
