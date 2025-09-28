@@ -863,3 +863,49 @@ func TestEntries_BatchCreate_MixedResults(t *testing.T) {
     _ = json.Unmarshal(rr.Body.Bytes(), &res)
     if len(res.Errors) < 2 { t.Fatalf("expected errors, got: %+v", res) }
 }
+
+func TestEntries_List_PaginationAndFilters(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+    // Create three entries with same currency/category different memos/dates
+    mk := func(memo string, dt time.Time) {
+        body := map[string]any{
+            "user_id":  userID.String(),
+            "date":     dt.UTC().Format(time.RFC3339),
+            "currency": "USD",
+            "memo":     memo,
+            "category": "general",
+            "lines": []map[string]any{
+                {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 100},
+                {"account_id": income.ID.String(), "side": "credit", "amount_minor": 100},
+            },
+        }
+        b, _ := json.Marshal(body)
+        req := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(b))
+        req.Header.Set("Content-Type", "application/json")
+        rec := httptest.NewRecorder(); h.ServeHTTP(rec, req)
+        if rec.Code != http.StatusCreated {
+            t.Fatalf("create entry expected 201, got %d: %s", rec.Code, rec.Body.String())
+        }
+    }
+    now := time.Now().UTC().Add(-time.Minute)
+    mk("one", now)
+    mk("two", now.Add(time.Second))
+    mk("three", now.Add(2*time.Second))
+
+    // List with limit=2
+    r1 := httptest.NewRequest(http.MethodGet, "/v1/entries?user_id="+userID.String()+"&limit=2&category=general", nil)
+    rec1 := httptest.NewRecorder(); h.ServeHTTP(rec1, r1)
+    if rec1.Code != http.StatusOK { t.Fatalf("list expected 200, got %d: %s", rec1.Code, rec1.Body.String()) }
+    var page1 struct{ Items []entryResp `json:"items"`; Next *string `json:"next_cursor"` }
+    _ = json.Unmarshal(rec1.Body.Bytes(), &page1)
+    if len(page1.Items) != 2 { t.Fatalf("expected 2 items, got %d", len(page1.Items)) }
+    if page1.Next == nil || *page1.Next == "" { t.Fatalf("expected next_cursor") }
+
+    // Next page
+    r2 := httptest.NewRequest(http.MethodGet, "/v1/entries?user_id="+userID.String()+"&limit=2&cursor="+*page1.Next, nil)
+    rec2 := httptest.NewRecorder(); h.ServeHTTP(rec2, r2)
+    if rec2.Code != http.StatusOK { t.Fatalf("list expected 200, got %d: %s", rec2.Code, rec2.Body.String()) }
+    var page2 struct{ Items []entryResp `json:"items"`; Next *string `json:"next_cursor"` }
+    _ = json.Unmarshal(rec2.Body.Bytes(), &page2)
+    if len(page2.Items) != 1 { t.Fatalf("expected 1 item, got %d", len(page2.Items)) }
+}

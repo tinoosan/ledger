@@ -28,6 +28,7 @@ const ctxKeyTrialBalance ctxKey = "validatedTrialBalance"
 func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            // Body size already limited by global middleware
             if !requireJSON(w, r) { return }
             var req postEntryRequest
             dec := json.NewDecoder(r.Body)
@@ -142,6 +143,7 @@ func (s *Server) validateTrialBalance() func(http.Handler) http.Handler {
 func (s *Server) validatePostAccount() func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            // Body size already limited by global middleware
             if !requireJSON(w, r) { return }
             var req postAccountRequest
             dec := json.NewDecoder(r.Body)
@@ -162,6 +164,18 @@ func (s *Server) validatePostAccount() func(http.Handler) http.Handler {
             }
             ctx := context.WithValue(r.Context(), ctxKeyPostAccount, in)
             next.ServeHTTP(w, r.WithContext(ctx))
+        })
+    }
+}
+
+// limitRequestBody caps the request body size using http.MaxBytesReader.
+func limitRequestBody(maxBytes int64) func(http.Handler) http.Handler {
+    return func(next http.Handler) http.Handler {
+        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            if r.Body != nil && maxBytes > 0 {
+                r.Body = http.MaxBytesReader(w, r.Body, maxBytes)
+            }
+            next.ServeHTTP(w, r)
         })
     }
 }

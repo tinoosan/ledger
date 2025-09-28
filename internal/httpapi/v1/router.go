@@ -4,6 +4,8 @@ package v1
 
 import (
     "net/http"
+    "os"
+    "strconv"
 
     chi "github.com/go-chi/chi/v5"
     chimw "github.com/go-chi/chi/v5/middleware"
@@ -32,6 +34,12 @@ type Server struct {
 func New(accReader AccountReader, entryReader EntryReader, idem IdempotencyStore, jrepo journal.Repo, arepo account.Repo, jwriter journal.Writer, awriter account.Writer, logger *slog.Logger) *Server {
     r := chi.NewRouter()
     r.Use(chimw.RequestID)
+    // Limit request body size (default 1 MiB; override via MAX_BODY_BYTES)
+    var maxBody int64 = 1 << 20
+    if v := os.Getenv("MAX_BODY_BYTES"); v != "" {
+        if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 { maxBody = n }
+    }
+    r.Use(limitRequestBody(maxBody))
     r.Use(requestLogger(logger))
     r.Use(recoverer(logger))
 
