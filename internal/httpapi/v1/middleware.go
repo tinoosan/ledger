@@ -183,7 +183,7 @@ func (s *Server) validateListAccounts() func(http.Handler) http.Handler {
             query := listAccountsQuery{UserID: userID}
             if n := r.URL.Query().Get("name"); n != "" { query.Name = n }
             if c := r.URL.Query().Get("currency"); c != "" { query.Currency = c }
-            if m := r.URL.Query().Get("method"); m != "" { query.Method = m }
+            if g := r.URL.Query().Get("group"); g != "" { query.Group = g }
             if v := r.URL.Query().Get("vendor"); v != "" { query.Vendor = v }
             if t := r.URL.Query().Get("type"); t != "" { query.Type = t }
             if sys := r.URL.Query().Get("system"); sys != "" {
@@ -206,7 +206,7 @@ func toAccountDomain(req postAccountRequest) ledger.Account {
         Name:     req.Name,
         Currency: req.Currency,
         Type:     req.Type,
-        Method:   req.Method,
+        Group:    req.Group,
         Vendor:   req.Vendor,
         System:   req.System,
         Metadata: meta.New(req.Metadata),

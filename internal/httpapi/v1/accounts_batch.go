@@ -28,10 +28,10 @@ func (s *Server) postAccountsBatch(w http.ResponseWriter, r *http.Request) {
     // Idempotency for batch (optional)
     if key := r.Header.Get("Idempotency-Key"); key != "" {
         // normalize body for stable hash
-        type normAccount struct{ UserID uuid.UUID `json:"user_id"`; Name string `json:"name"`; Currency string `json:"currency"`; Method string `json:"method"`; Vendor string `json:"vendor"`; Type ledger.AccountType `json:"type"`; Metadata meta.Metadata `json:"metadata,omitempty"` }
+        type normAccount struct{ UserID uuid.UUID `json:"user_id"`; Name string `json:"name"`; Currency string `json:"currency"`; Group string `json:"group"`; Vendor string `json:"vendor"`; Type ledger.AccountType `json:"type"`; Metadata meta.Metadata `json:"metadata,omitempty"` }
         type normAcct struct{ UserID uuid.UUID `json:"user_id"`; Accounts []normAccount `json:"accounts"` }
         n := normAcct{UserID: req.UserID, Accounts: make([]normAccount, 0, len(req.Accounts))}
-        for _, a := range req.Accounts { n.Accounts = append(n.Accounts, normAccount{UserID: req.UserID, Name: a.Name, Currency: a.Currency, Method: a.Method, Vendor: a.Vendor, Type: a.Type, Metadata: meta.New(a.Metadata)}) }
+        for _, a := range req.Accounts { n.Accounts = append(n.Accounts, normAccount{UserID: req.UserID, Name: a.Name, Currency: a.Currency, Group: a.Group, Vendor: a.Vendor, Type: a.Type, Metadata: meta.New(a.Metadata)}) }
         nb, _ := json.Marshal(n)
         h := hashBytes(nb)
         s.batchIdemMu.RLock()
@@ -55,7 +55,7 @@ func (s *Server) postAccountsBatch(w http.ResponseWriter, r *http.Request) {
             toJSON(rw, http.StatusUnprocessableEntity, out); s.storeBatch(key, h, rw); return
         }
         resp := struct{ Accounts []accountResponse `json:"accounts"` }{Accounts: make([]accountResponse, 0, len(created))}
-        for _, a := range created { resp.Accounts = append(resp.Accounts, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Method: a.Method, Vendor: a.Vendor, Path: a.Path(), Metadata: a.Metadata, System: a.System, Active: a.Active}) }
+        for _, a := range created { resp.Accounts = append(resp.Accounts, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Group: a.Group, Vendor: a.Vendor, Path: a.Path(), Metadata: a.Metadata, System: a.System, Active: a.Active}) }
         toJSON(rw, http.StatusCreated, resp); s.storeBatch(key, h, rw); return
     }
 

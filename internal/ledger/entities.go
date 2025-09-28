@@ -72,8 +72,8 @@ type Account struct {
     Name     string
     Currency string
     Type     AccountType
-    // Method describes the instrument or sub-type (e.g., Bank, CreditCard, Cash, Savings, Loan, Rent, Salary).
-    Method   string
+    // Group indicates the subtype (slug), e.g., bank, credit_card, cash, salary.
+    Group    string
     // Vendor identifies the specific institution or instance (e.g., Monzo, Amex, PayPal, LandlordLtd, EmployerX).
     Vendor   string
     // Metadata holds additional key-value attributes for the account.
@@ -87,11 +87,12 @@ type Account struct {
 // Path returns a colon-separated identifier for the account: Type:Method:Vendor.
 // Example: assets:bank:monzo
 func (a Account) Path() string {
-    // Special-case OpeningBalances: show concise path without vendor and with lowercase
-    if a.Type == AccountTypeEquity && strings.EqualFold(a.Method, "OpeningBalances") {
-        return "equity:openingbalances"
+    // Temporary: vendor slugging handled later; for now lowercase vendor
+    // Special-case OpeningBalances: concise path
+    if a.Type == AccountTypeEquity && strings.EqualFold(a.Group, "opening_balances") {
+        return "equity:opening_balances"
     }
-    return string(a.Type) + ":" + strings.ToLower(a.Method) + ":" + strings.ToLower(a.Vendor)
+    return string(a.Type) + ":" + strings.ToLower(a.Group) + ":" + strings.ToLower(a.Vendor)
 }
 
 

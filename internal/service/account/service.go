@@ -54,7 +54,7 @@ func (s *service) EnsureOpeningBalanceAccount(ctx context.Context, userID uuid.U
     existing, err := s.repo.ListAccounts(ctx, userID)
     if err != nil { return ledger.Account{}, err }
     for _, a := range existing {
-        if strings.EqualFold(a.Currency, currency) && strings.EqualFold(normalizedPathString(a), "equity:openingbalances") {
+        if strings.EqualFold(a.Currency, currency) && strings.EqualFold(normalizedPathString(a), "equity:opening_balances") {
             return a, nil
         }
     }
@@ -65,7 +65,7 @@ func (s *service) EnsureOpeningBalanceAccount(ctx context.Context, userID uuid.U
         Name:     "Opening Balances",
         Currency: currency,
         Type:     ledger.AccountTypeEquity,
-        Method:   "OpeningBalances",
+        Group:    "opening_balances",
         Vendor:   "System",
         System:   true,
         Active:   true,
@@ -88,8 +88,8 @@ func (s *service) ValidateCreate(account ledger.Account) error {
     if account.Currency == "" {
         return errors.New("currency is required")
     }
-    if account.Method == "" {
-        return errors.New("method is required")
+    if account.Group == "" {
+        return errors.New("group is required")
     }
     if account.Vendor == "" {
         return errors.New("vendor is required")
@@ -101,12 +101,12 @@ func (s *service) ValidateCreate(account ledger.Account) error {
         return errors.New("invalid account type")
     }
     // OpeningBalances/system rules
-    if account.System || strings.EqualFold(account.Method, "OpeningBalances") {
+    if account.System || strings.EqualFold(account.Group, "opening_balances") {
         if account.Type != ledger.AccountTypeEquity {
             return errors.New("opening balances must be equity type")
         }
-        if !strings.EqualFold(account.Method, "OpeningBalances") {
-            return errors.New("invalid system account method; expected OpeningBalances")
+        if !strings.EqualFold(account.Group, "opening_balances") {
+            return errors.New("invalid system account group; expected opening_balances")
         }
     }
     return nil
@@ -122,7 +122,7 @@ func (s *service) EnsureAccountsBatch(ctx context.Context, userID uuid.UUID, spe
     for i, in := range specs {
         in.UserID = userID
         // Normalize path casing
-        in.Method = strings.TrimSpace(in.Method)
+        in.Group = strings.TrimSpace(in.Group)
         in.Vendor = strings.TrimSpace(in.Vendor)
         in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
         normalized[i] = in
@@ -175,13 +175,13 @@ func (s *service) EnsureAccountsBatch(ctx context.Context, userID uuid.UUID, spe
                 Name:     a.Name,
                 Currency: a.Currency,
                 Type:     a.Type,
-                Method:   a.Method,
+                Group:    a.Group,
                 Vendor:   a.Vendor,
                 System:   a.System,
                 Active:   true,
                 Metadata: a.Metadata,
             }
-            if acc.Type == ledger.AccountTypeEquity && strings.EqualFold(acc.Method, "OpeningBalances") { acc.Vendor = "System"; acc.System = true }
+            if acc.Type == ledger.AccountTypeEquity && strings.EqualFold(acc.Group, "opening_balances") { acc.Vendor = "System"; acc.System = true }
             if _, err := tx.CreateAccount(ctx, acc); err != nil { _ = tx.Rollback(ctx); return nil, nil, err }
             created = append(created, acc)
         }
@@ -211,29 +211,15 @@ func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Ac
     if err != nil {
         return ledger.Account{}, err
     }
-    desired := normalizedPathString(ledger.Account{Type: account.Type, Method: account.Method, Vendor: account.Vendor, System: account.System})
+    desired := normalizedPathString(ledger.Account{Type: account.Type, Group: account.Group, Vendor: account.Vendor, System: account.System})
     for _, a := range existing {
         if a.UserID == account.UserID && strings.EqualFold(normalizedPathString(a), desired) && strings.EqualFold(a.Currency, account.Currency) {
             return ledger.Account{}, ErrPathExists
         }
     }
-    acc := ledger.Account{
-        ID:       uuid.New(),
-        UserID:   account.UserID,
-        Name:     account.Name,
-        Currency: account.Currency,
-        Type:     account.Type,
-        Method:   account.Method,
-        Vendor:   account.Vendor,
-        System:   account.System,
-        Active:   true,
-        Metadata: account.Metadata,
-    }
-    if acc.Type == ledger.AccountTypeEquity && strings.EqualFold(acc.Method, "OpeningBalances") {
-        acc.Vendor = "System"
-        acc.System = true
-    }
-    return s.writer.CreateAccount(ctx, acc)
+    accNew := ledger.Account{ID: uuid.New(), UserID: account.UserID, Name: account.Name, Currency: account.Currency, Type: account.Type, Group: account.Group, Vendor: account.Vendor, System: account.System, Active: true, Metadata: account.Metadata}
+    if accNew.Type == ledger.AccountTypeEquity && strings.EqualFold(accNew.Group, "opening_balances") { accNew.Vendor = "System"; accNew.System = true }
+    return s.writer.CreateAccount(ctx, accNew)
 }
 
 func (s *service) List(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error) {
@@ -246,10 +232,10 @@ func (s *service) List(ctx context.Context, userID uuid.UUID) ([]ledger.Account,
 // normalizedPathString returns the normalized path for uniqueness checks.
 // OpeningBalances are represented as "equity:openingbalances" irrespective of vendor.
 func normalizedPathString(a ledger.Account) string {
-    if a.Type == ledger.AccountTypeEquity && strings.EqualFold(a.Method, "OpeningBalances") {
-        return "equity:openingbalances"
+    if a.Type == ledger.AccountTypeEquity && strings.EqualFold(a.Group, "opening_balances") {
+        return "equity:opening_balances"
     }
-    return string(a.Type) + ":" + strings.ToLower(a.Method) + ":" + strings.ToLower(a.Vendor)
+    return string(a.Type) + ":" + strings.ToLower(a.Group) + ":" + strings.ToLower(a.Vendor)
 }
 
 // ErrPathExists indicates an account with the same normalized path already exists for the user.
@@ -272,8 +258,8 @@ func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account,
     }
     // Forbid toggling system flag via update
     if a.System != current.System { return ledger.Account{}, errs.ErrImmutable }
-    // If method/vendor changed, ensure unique (user, path, currency)
-    if current.Method != a.Method || current.Vendor != a.Vendor {
+    // If group/vendor changed, ensure unique (user, path, currency)
+    if current.Group != a.Group || current.Vendor != a.Vendor {
         existing, err := s.repo.ListAccounts(ctx, a.UserID)
         if err != nil { return ledger.Account{}, err }
         desired := normalizedPathString(a)

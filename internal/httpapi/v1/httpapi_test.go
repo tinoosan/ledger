@@ -40,7 +40,7 @@ type acctResp struct {
     Name     string `json:"name"`
     Currency string `json:"currency"`
     Type     string `json:"type"`
-    Method   string `json:"method"`
+    Group    string `json:"group"`
     Vendor   string `json:"vendor"`
     Path     string `json:"path"`
 }
@@ -55,8 +55,8 @@ func setup(t *testing.T) (*memory.Store, http.Handler, uuid.UUID, ledger.Account
     store := memory.New()
     user := ledger.User{ID: uuid.New()}
     store.SeedUser(user)
-    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset, Method: "Cash", Vendor: "Wallet"}
-    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue, Method: "Salary", Vendor: "Employer"}
+    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset, Group: "cash", Vendor: "Wallet"}
+    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue, Group: "salary", Vendor: "Employer"}
     store.SeedAccount(cash)
     store.SeedAccount(income)
     h := New(store, store, store, store, store, store, store, testLogger()).Handler()
@@ -563,7 +563,7 @@ func TestAccount_BalanceAndLedger(t *testing.T) {
 func TestBalance_CurrencyMatchesAccount(t *testing.T) {
     store, h, userID, _, _ := setup(t)
     // Create GBP bank account
-    acct := map[string]any{"user_id": userID.String(), "name": "Monzo GBP", "currency": "GBP", "type": "asset", "method": "Bank", "vendor": "Monzo"}
+    acct := map[string]any{"user_id": userID.String(), "name": "Monzo GBP", "currency": "GBP", "type": "asset", "group": "bank", "vendor": "Monzo"}
     b, _ := json.Marshal(acct)
     req := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
     req.Header.Set("Content-Type", "application/json")
@@ -641,7 +641,7 @@ func TestAccounts_InvalidAndSystemGuards(t *testing.T) {
     if rr.Code != http.StatusBadRequest { t.Fatalf("expected 400 for invalid account, got %d", rr.Code) }
 
     // create a normal account
-    acct := map[string]any{"user_id": userID.String(), "name": "Sys", "currency": "USD", "type": "asset", "method": "Bank", "vendor": "X"}
+    acct := map[string]any{"user_id": userID.String(), "name": "Sys", "currency": "USD", "type": "asset", "group": "bank", "vendor": "X"}
     ab, _ := json.Marshal(acct)
     r2 := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(ab))
     r2.Header.Set("Content-Type", "application/json")
@@ -682,7 +682,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
         "name":     "Monzo Current",
         "currency": "USD",
         "type":     "asset",
-        "method":   "Bank",
+        "group":    "bank",
         "vendor":   "Monzo",
         "metadata": map[string]any{"bank.iban": "DE89 3704 0044 0532 0130 00"},
     }
@@ -715,7 +715,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     }
 
     // list with filters
-    r2 := httptest.NewRequest(http.MethodGet, "/v1/accounts?user_id="+userID.String()+"&method=bank&vendor=monzo&type=asset", nil)
+    r2 := httptest.NewRequest(http.MethodGet, "/v1/accounts?user_id="+userID.String()+"&group=bank&vendor=monzo&type=asset", nil)
     rec2 := httptest.NewRecorder()
     h.ServeHTTP(rec2, r2)
     if rec2.Code != http.StatusOK {
@@ -730,7 +730,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     }
 
     // patch (rename path + metadata)
-    up := map[string]any{"method": "Banking", "vendor": "Monzo"}
+    up := map[string]any{"group": "banking", "vendor": "Monzo"}
     ub, _ := json.Marshal(up)
     r3 := httptest.NewRequest(http.MethodPatch, "/v1/accounts/"+ar.ID+"?user_id="+userID.String(), bytes.NewReader(ub))
     r3.Header.Set("Content-Type", "application/json")
@@ -767,7 +767,7 @@ func TestAccounts_InvalidMetadata422(t *testing.T) {
     // key too long
     longKey := make([]byte, 65)
     for i := range longKey { longKey[i] = 'k' }
-    acct := map[string]any{"user_id": userID.String(), "name": "BadMeta", "currency": "USD", "type": "asset", "method": "Bank", "vendor": "X", "metadata": map[string]any{string(longKey): "v"}}
+    acct := map[string]any{"user_id": userID.String(), "name": "BadMeta", "currency": "USD", "type": "asset", "group": "bank", "vendor": "X", "metadata": map[string]any{string(longKey): "v"}}
     b, _ := json.Marshal(acct)
     r := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
@@ -784,7 +784,7 @@ func TestOpeningBalances_EndpointCreatesPerCurrency(t *testing.T) {
     if rr.Code != http.StatusOK { t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String()) }
     var ar acctResp
     _ = json.Unmarshal(rr.Body.Bytes(), &ar)
-    if ar.Type != "equity" || ar.Path != "equity:openingbalances" || ar.Currency != "GBP" {
+    if ar.Type != "equity" || ar.Path != "equity:opening_balances" || ar.Currency != "GBP" {
         t.Fatalf("unexpected opening account: %+v", ar)
     }
 
@@ -800,9 +800,9 @@ func TestAccounts_BatchCreate_MixedResults(t *testing.T) {
     payload := map[string]any{
         "user_id": userID.String(),
         "accounts": []map[string]any{
-            {"name": "Wallet 1", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket", "metadata": map[string]any{"source": "seed"}},
-            {"name": "Wallet 2", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket"},
-            {"name": "", "currency": "", "type": "asset", "method": "", "vendor": ""},
+            {"name": "Wallet 1", "currency": "USD", "type": "asset", "group": "cash", "vendor": "Pocket", "metadata": map[string]any{"source": "seed"}},
+            {"name": "Wallet 2", "currency": "USD", "type": "asset", "group": "cash", "vendor": "Pocket"},
+            {"name": "", "currency": "", "type": "asset", "group": "", "vendor": ""},
         },
     }
     b, _ := json.Marshal(payload)

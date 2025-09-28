@@ -27,7 +27,7 @@ func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
         writeErr(w, http.StatusInternalServerError, "could not create account", "")
         return
     }
-    resp := accountResponse{ID: createdAccount.ID, UserID: createdAccount.UserID, Name: createdAccount.Name, Currency: createdAccount.Currency, Type: createdAccount.Type, Method: createdAccount.Method, Vendor: createdAccount.Vendor, Path: createdAccount.Path(), Metadata: createdAccount.Metadata, System: createdAccount.System, Active: createdAccount.Active}
+    resp := accountResponse{ID: createdAccount.ID, UserID: createdAccount.UserID, Name: createdAccount.Name, Currency: createdAccount.Currency, Type: createdAccount.Type, Group: createdAccount.Group, Vendor: createdAccount.Vendor, Path: createdAccount.Path(), Metadata: createdAccount.Metadata, System: createdAccount.System, Active: createdAccount.Active}
     toJSON(w, http.StatusCreated, resp)
 }
 
@@ -47,12 +47,12 @@ func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
     for _, account := range accounts {
         if query.Name   != "" && !equalsFold(account.Name, query.Name) { continue }
         if query.Currency != "" && !equalsFold(account.Currency, query.Currency) { continue }
-        if query.Method != "" && !equalsFold(account.Method, query.Method) { continue }
+        if query.Group != "" && !equalsFold(account.Group, query.Group) { continue }
         if query.Vendor != "" && !equalsFold(account.Vendor, query.Vendor) { continue }
         if query.Type   != "" && !equalsFold(string(account.Type), query.Type) { continue }
         if query.System != nil && account.System != *query.System { continue }
         if query.Active != nil && account.Active != *query.Active { continue }
-        responses = append(responses, accountResponse{ID: account.ID, UserID: account.UserID, Name: account.Name, Currency: account.Currency, Type: account.Type, Method: account.Method, Vendor: account.Vendor, Path: account.Path(), Metadata: account.Metadata, System: account.System, Active: account.Active})
+        responses = append(responses, accountResponse{ID: account.ID, UserID: account.UserID, Name: account.Name, Currency: account.Currency, Type: account.Type, Group: account.Group, Vendor: account.Vendor, Path: account.Path(), Metadata: account.Metadata, System: account.System, Active: account.Active})
     }
     toJSON(w, http.StatusOK, responses)
 }
@@ -94,7 +94,7 @@ func (s *Server) getAccount(w http.ResponseWriter, r *http.Request) {
         if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return
     }
-    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata, System: acc.System, Active: acc.Active}
+    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Group: acc.Group, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata, System: acc.System, Active: acc.Active}
     toJSON(w, http.StatusOK, resp)
 }
 
@@ -117,6 +117,6 @@ func (s *Server) getOpeningBalancesAccount(w http.ResponseWriter, r *http.Reques
         writeErr(w, http.StatusBadRequest, err.Error(), "")
         return
     }
-    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata, System: acc.System, Active: acc.Active}
+    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Group: acc.Group, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata, System: acc.System, Active: acc.Active}
     toJSON(w, http.StatusOK, resp)
 }

@@ -104,7 +104,7 @@ type postAccountRequest struct {
     Name     string              `json:"name"`
     Currency string              `json:"currency"`
     Type     ledger.AccountType  `json:"type"`
-    Method   string              `json:"method"`
+    Group    string              `json:"group"`
     Vendor   string              `json:"vendor"`
     System   bool                `json:"system,omitempty"`
     Metadata map[string]string   `json:"metadata,omitempty"`
@@ -116,7 +116,7 @@ type accountResponse struct {
     Name     string              `json:"name"`
     Currency string              `json:"currency"`
     Type     ledger.AccountType  `json:"type"`
-    Method   string              `json:"method"`
+    Group    string              `json:"group"`
     Vendor   string              `json:"vendor"`
     Path     string              `json:"path"`
     Metadata meta.Metadata   `json:"metadata,omitempty"`
@@ -128,7 +128,7 @@ type listAccountsQuery struct {
     UserID uuid.UUID
     Name   string
     Currency string
-    Method string
+    Group string
     Vendor string
     Type   string
     System *bool

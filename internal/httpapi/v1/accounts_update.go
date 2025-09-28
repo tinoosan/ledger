@@ -24,7 +24,7 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
     }
     var payload struct {
         Name     *string            `json:"name"`
-        Method   *string            `json:"method"`
+        Group    *string            `json:"group"`
         Vendor   *string            `json:"vendor"`
         Metadata map[string]string  `json:"metadata"`
     }
@@ -51,7 +51,7 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
         return
     }
     if payload.Name != nil { acc.Name = *payload.Name }
-    if payload.Method != nil { acc.Method = *payload.Method }
+    if payload.Group != nil { acc.Group = *payload.Group }
     if payload.Vendor != nil { acc.Vendor = *payload.Vendor }
     if payload.Metadata != nil {
         // validate and merge
@@ -71,7 +71,7 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
         writeErr(w, http.StatusBadRequest, err.Error(), "")
         return
     }
-    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Method: acc.Method, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata, System: acc.System, Active: acc.Active}
+    resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Group: acc.Group, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata, System: acc.System, Active: acc.Active}
     toJSON(w, http.StatusOK, resp)
 }
 

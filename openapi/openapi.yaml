@@ -261,7 +261,7 @@ paths:
           required: false
           schema: { type: string }
         - in: query
-          name: method
+          name: group
           required: false
           schema: { type: string }
         - in: query
@@ -657,15 +657,15 @@ components:
 
     AccountRequest:
       type: object
-      required: [user_id, name, currency, type, method, vendor]
+      required: [user_id, name, currency, type, group, vendor]
       properties:
         user_id: { $ref: '#/components/schemas/UUID' }
         name: { type: string }
         currency: { type: string, description: ISO 4217 currency code }
         type: { $ref: '#/components/schemas/AccountType' }
-        method:
+        group:
           type: string
-          description: "Instrument or sub-type, e.g. Bank | CreditCard | Cash"
+          description: "Subtype slug, e.g. bank | credit_card | cash | opening_balances"
         vendor:
           type: string
           description: "Institution/identifier, e.g. Monzo | Amex | PayPal"
@@ -679,7 +679,7 @@ components:
       type: object
       properties:
         name: { type: string }
-        method: { type: string }
+        group: { type: string }
         vendor: { type: string }
         metadata:
           type: object
@@ -693,7 +693,7 @@ components:
             id: { $ref: '#/components/schemas/UUID' }
             path:
               type: string
-              description: Derived identifier type:method:vendor (lowercase)
+              description: Derived identifier type:group:vendorSlug (lowercase)
               example: assets:bank:monzo
             metadata:
               type: object
