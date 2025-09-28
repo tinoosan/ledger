@@ -118,6 +118,7 @@ paths:
                     items: { $ref: '#/components/schemas/JournalEntryResponse' }
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '415': { description: Unsupported Media Type, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '409': { description: Conflict (idempotency mismatch), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '422':
           description: Unprocessable (no write; per-item errors)
           content:
@@ -299,6 +300,102 @@ paths:
                     items: { $ref: '#/components/schemas/AccountResponse' }
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '415': { description: Unsupported Media Type, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '409': { description: Conflict (idempotency mismatch), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '422':
+          description: Unprocessable (no write; per-item errors)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items: { $ref: '#/components/schemas/BatchErrorItem' }
+
+  /v1/entries:batch:
+    post:
+      summary: Batch create journal entries (alias)
+      operationId: batchCreateEntriesAlias
+      tags: [entries]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+          description: Required for batch idempotency; applies to the entire batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entries]
+              properties:
+                entries:
+                  type: array
+                  items: { $ref: '#/components/schemas/JournalEntryRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: '#/components/schemas/JournalEntryResponse' }
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '415': { description: Unsupported Media Type, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '409': { description: Conflict (idempotency mismatch), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '422':
+          description: Unprocessable (no write; per-item errors)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items: { $ref: '#/components/schemas/BatchErrorItem' }
+
+  /v1/accounts:batch:
+    post:
+      summary: Batch create accounts (alias)
+      operationId: batchCreateAccountsAlias
+      tags: [accounts]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+          description: Required for batch idempotency; applies to the entire batch
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [user_id, accounts]
+              properties:
+                user_id: { $ref: '#/components/schemas/UUID' }
+                accounts:
+                  type: array
+                  items: { $ref: '#/components/schemas/AccountRequest' }
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccountResponse' }
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '415': { description: Unsupported Media Type, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '409': { description: Conflict (idempotency mismatch), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '422':
           description: Unprocessable (no write; per-item errors)
           content:
