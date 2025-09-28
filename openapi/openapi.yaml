@@ -787,3 +787,35 @@ components:
         code: { type: string }
 
     
+  /v1/dictionary/groups:
+    get:
+      summary: Curated groups per account type
+      operationId: getGroupsDictionary
+      tags: [dictionary]
+      parameters:
+        - in: query
+          name: type
+          required: false
+          schema: { $ref: '#/components/schemas/AccountType' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type: { $ref: '#/components/schemas/AccountType' }
+                        groups:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              code: { type: string, example: "credit_card" }
+                              label: { type: string, example: "Credit Card" }
+                              reserved: { type: boolean, example: false }

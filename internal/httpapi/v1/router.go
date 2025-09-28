@@ -83,6 +83,8 @@ func (s *Server) routes() {
     // Health (unversioned)
     s.rt.Get("/healthz", s.healthz)
     s.rt.Get("/readyz", s.readyz)
+    // Dictionary
+    s.rt.Get("/v1/dictionary/groups", s.getGroupsDictionary)
     // OpenAPI spec (dev convenience)
     s.rt.Get("/v1/openapi.yaml", s.openapiSpec)
 }
