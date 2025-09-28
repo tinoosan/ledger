@@ -62,6 +62,26 @@ paths:
                   next_cursor: { type: string }
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+    post:
+      summary: Create a journal entry
+      operationId: createEntry
+      tags: [entries]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: false
+          schema: { type: string }
+          description: Optional key to make POST idempotent per user. If the same key is reused, the original entry is returned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JournalEntryRequest' }
+      responses:
+        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '422': { description: Unprocessable (validation), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
   /entries/batch:
     post:
@@ -85,26 +105,6 @@ paths:
                 items:
                   $ref: '#/components/schemas/BatchEntryItem'
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
-    post:
-      summary: Create a journal entry
-      operationId: createEntry
-      tags: [entries]
-      parameters:
-        - in: header
-          name: Idempotency-Key
-          required: false
-          schema: { type: string }
-          description: Optional key to make POST idempotent per user. If the same key is reused, the original entry is returned.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema: { $ref: '#/components/schemas/JournalEntryRequest' }
-      responses:
-        '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/JournalEntryResponse' }}}}
-        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
-        '422': { description: Unprocessable (validation), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
-        '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
   /entries/{id}:
     get:
@@ -530,8 +530,8 @@ components:
         account: { $ref: '#/components/schemas/AccountResponse' }
         error: { type: string }
         code: { type: string }
-            system:
-              type: boolean
+        system:
+          type: boolean
 
     AccountBalanceResponse:
       type: object
