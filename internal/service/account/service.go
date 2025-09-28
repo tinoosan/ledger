@@ -113,11 +113,11 @@ func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account,
     if err != nil { return ledger.Account{}, err }
     if current.UserID != a.UserID { return ledger.Account{}, errs.ErrForbidden }
     if current.Metadata != nil && strings.EqualFold(current.Metadata["system"], "true") {
-        return ledger.Account{}, errs.ErrForbidden
+        return ledger.Account{}, errs.ErrSystemAccount
     }
     // Enforce immutability on Type/Currency
     if current.Type != a.Type || current.Currency != a.Currency {
-        return ledger.Account{}, errs.ErrUnprocessable
+        return ledger.Account{}, errs.ErrImmutable
     }
     // If method/vendor changed, ensure unique path
     if current.Method != a.Method || current.Vendor != a.Vendor {
@@ -143,7 +143,7 @@ func (s *service) Deactivate(ctx context.Context, userID, accountID uuid.UUID) e
     if err != nil { return err }
     if acc.UserID != userID { return errs.ErrForbidden }
     if acc.Metadata != nil && strings.EqualFold(acc.Metadata["system"], "true") {
-        return errs.ErrForbidden
+        return errs.ErrSystemAccount
     }
     if acc.Metadata == nil { acc.Metadata = map[string]string{} }
     acc.Metadata["active"] = "false"

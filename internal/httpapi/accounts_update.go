@@ -57,8 +57,10 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
     }
     acc, err = s.accountSvc.Update(r.Context(), acc)
     if err != nil {
+        if errors.Is(err, errs.ErrSystemAccount) { writeErr(w, http.StatusForbidden, "system_account", "system_account"); return }
         if errors.Is(err, errs.ErrForbidden) { forbidden(w, "forbidden") ; return }
         if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid") ; return }
+        if errors.Is(err, errs.ErrImmutable) { unprocessable(w, "immutable", "immutable"); return }
         if errors.Is(err, errs.ErrUnprocessable) { unprocessable(w, "validation_error", "validation_error"); return }
         if errors.Is(err, account.ErrPathExists) { conflict(w, err.Error()); return }
         writeErr(w, http.StatusBadRequest, err.Error(), "")
@@ -87,6 +89,7 @@ func (s *Server) deactivateAccount(w http.ResponseWriter, r *http.Request) {
         return
     }
     if err := s.accountSvc.Deactivate(r.Context(), userID, id); err != nil {
+        if errors.Is(err, errs.ErrSystemAccount) { writeErr(w, http.StatusForbidden, "system_account", "system_account"); return }
         if errors.Is(err, errs.ErrForbidden) { forbidden(w, "forbidden"); return }
         if errors.Is(err, errs.ErrInvalid) { badRequest(w, "invalid"); return }
         if errors.Is(err, errs.ErrNotFound) { notFound(w); return }
