@@ -616,6 +616,7 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
         "type":     "asset",
         "method":   "Bank",
         "vendor":   "Monzo",
+        "metadata": map[string]any{"bank.iban": "DE89 3704 0044 0532 0130 00"},
     }
     b, _ := json.Marshal(acct)
     req := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
@@ -632,6 +633,9 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     if ar.Path != "asset:bank:monzo" {
         t.Fatalf("unexpected path: %s", ar.Path)
     }
+    // verify metadata persisted
+    a1, _ := store.AccountByID(nil, userID, uuid.MustParse(ar.ID))
+    if a1.Metadata["bank.iban"] == "" { t.Fatalf("expected metadata to persist") }
 
     // duplicate path -> 409
     rec = httptest.NewRecorder()
@@ -713,7 +717,7 @@ func TestAccounts_BatchCreate_MixedResults(t *testing.T) {
 
     // First item valid, second item duplicate (same path/currency), third invalid (missing fields)
     items := []map[string]any{
-        {"user_id": userID.String(), "name": "Wallet 1", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket"},
+        {"user_id": userID.String(), "name": "Wallet 1", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket", "metadata": map[string]any{"source": "seed"}},
         {"user_id": userID.String(), "name": "Wallet 2", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket"},
         {"user_id": userID.String(), "name": "", "currency": "", "type": "asset", "method": "", "vendor": ""},
     }

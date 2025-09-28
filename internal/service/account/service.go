@@ -128,6 +128,7 @@ func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Ac
         Vendor:   account.Vendor,
         System:   account.System,
         Active:   true,
+        Metadata: account.Metadata,
     }
     if acc.Type == ledger.AccountTypeEquity && strings.EqualFold(acc.Method, "OpeningBalances") {
         acc.Vendor = "System"

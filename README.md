@@ -133,7 +133,7 @@ curl -sS -X POST http://localhost:8080/entries/reverse \
 Create an account:
 
 ```
-curl -sS -X POST http://localhost:8080/accounts \
+curl -sS -X POST http://localhost:8080/v1/accounts \
   -H 'Content-Type: application/json' \
   -d '{
     "user_id": "<user_id>",
@@ -141,7 +141,8 @@ curl -sS -X POST http://localhost:8080/accounts \
     "currency": "USD",
     "type": "asset",
     "method": "Bank",
-    "vendor": "Monzo"
+    "vendor": "Monzo",
+    "metadata": { "bank.iban": "DE89 3704 0044 0532 0130 00" }
   }'
 ```
 
@@ -163,13 +164,13 @@ Trial balance:
 curl -sS "http://localhost:8080/trial-balance?user_id=<user_id>"
 ```
 
-Batch create accounts:
+Batch create accounts (with metadata):
 
 ```
 curl -sS -X POST http://localhost:8080/v1/accounts/batch \
   -H 'Content-Type: application/json' \
   -d '[
-    {"user_id": "<user_id>", "name": "Groceries",     "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"},
+    {"user_id": "<user_id>", "name": "Groceries",     "currency": "USD", "type": "expense", "method": "Category", "vendor": "General", "metadata": {"report.tag": "food"}},
     {"user_id": "<user_id>", "name": "Eating Out",    "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"},
     {"user_id": "<user_id>", "name": "Transport",     "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"},
     {"user_id": "<user_id>", "name": "Groceries",     "currency": "GBP", "type": "expense", "method": "Category", "vendor": "General"}

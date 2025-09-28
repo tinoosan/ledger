@@ -102,6 +102,7 @@ type postAccountRequest struct {
     Method   string              `json:"method"`
     Vendor   string              `json:"vendor"`
     System   bool                `json:"system,omitempty"`
+    Metadata map[string]string   `json:"metadata,omitempty"`
 }
 
 type accountResponse struct {

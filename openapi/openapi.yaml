@@ -496,6 +496,9 @@ components:
         system:
           type: boolean
           description: Reserved system account (immutable); when true, path must be equity:openingbalances:system
+        metadata:
+          type: object
+          additionalProperties: { type: string }
     AccountUpdateRequest:
       type: object
       properties:
