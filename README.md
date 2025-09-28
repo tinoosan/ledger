@@ -53,7 +53,7 @@ See OpenAPI for detailed request/response schemas.
   - `name`, path (`type:method:vendor` via `method` + `vendor`), and `metadata`
   - Path is normalized lowercase and unique per user
 - Soft deletes only
-  - Deactivate by setting `metadata.active=false`; no hard deletes
+  - Deactivate by setting `active=false`; no hard deletes
 - System accounts
   - `system=true` → forbid PATCH/DELETE
   - Reserved: `Equity:OpeningBalances` (path `equity:openingbalances:system`)

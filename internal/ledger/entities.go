@@ -79,6 +79,8 @@ type Account struct {
     Metadata map[string]string
     // System marks reserved, immutable accounts (e.g., Equity:OpeningBalances).
     System   bool
+    // Active indicates whether the account is active (soft-delete when false).
+    Active   bool
 }
 
 // Path returns a colon-separated identifier for the account: Type:Method:Vendor.

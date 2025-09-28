@@ -474,6 +474,8 @@ components:
               type: object
               additionalProperties:
                 type: string
+            active:
+              type: boolean
             system:
               type: boolean
 

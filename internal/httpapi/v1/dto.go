@@ -115,6 +115,7 @@ type accountResponse struct {
     Path     string              `json:"path"`
     Metadata map[string]string   `json:"metadata,omitempty"`
     System   bool                `json:"system"`
+    Active   bool                `json:"active"`
 }
 
 type listAccountsQuery struct {

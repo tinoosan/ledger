@@ -685,8 +685,8 @@ func TestAccounts_CreateDuplicatePathAndFilters(t *testing.T) {
     if err != nil {
         t.Fatalf("AccountByID: %v", err)
     }
-    if a.Metadata["active"] != "false" {
-        t.Fatalf("expected active=false after delete; got: %v", a.Metadata)
+    if a.Active != false {
+        t.Fatalf("expected active=false after delete; got: %+v", a)
     }
 }
 

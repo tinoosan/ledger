@@ -127,17 +127,11 @@ func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Ac
         Method:   account.Method,
         Vendor:   account.Vendor,
         System:   account.System,
+        Active:   true,
     }
     if acc.Type == ledger.AccountTypeEquity && strings.EqualFold(acc.Method, "OpeningBalances") {
         acc.Vendor = "System"
         acc.System = true
-        if acc.Metadata == nil { acc.Metadata = map[string]string{} }
-        acc.Metadata["active"] = "true"
-    }
-    // Default active=true for non-system accounts as well
-    if !acc.System {
-        if acc.Metadata == nil { acc.Metadata = map[string]string{} }
-        if _, ok := acc.Metadata["active"]; !ok { acc.Metadata["active"] = "true" }
     }
     return s.writer.CreateAccount(ctx, acc)
 }
@@ -204,8 +198,7 @@ func (s *service) Deactivate(ctx context.Context, userID, accountID uuid.UUID) e
     if acc.System {
         return errs.ErrSystemAccount
     }
-    if acc.Metadata == nil { acc.Metadata = map[string]string{} }
-    acc.Metadata["active"] = "false"
+    acc.Active = false
     if _, err := s.writer.UpdateAccount(ctx, acc); err != nil { return err }
     return nil
 }

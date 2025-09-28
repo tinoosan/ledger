@@ -30,9 +30,9 @@ func main() {
     user := ledger.User{ID: uuid.New()}
     store.SeedUser(user)
     // System account reserved for opening balances
-    opening := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Opening Balances", Currency: "USD", Type: ledger.AccountTypeEquity, Method: "OpeningBalances", Vendor: "System", System: true, Metadata: map[string]string{"active":"true"}}
-    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset, Method: "Cash", Vendor: "Wallet", Metadata: map[string]string{"active":"true"}}
-    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue, Method: "Salary", Vendor: "Employer", Metadata: map[string]string{"active":"true"}}
+    opening := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Opening Balances", Currency: "USD", Type: ledger.AccountTypeEquity, Method: "OpeningBalances", Vendor: "System", System: true, Active: true}
+    cash := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Cash", Currency: "USD", Type: ledger.AccountTypeAsset, Method: "Cash", Vendor: "Wallet", Active: true}
+    income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue, Method: "Salary", Vendor: "Employer", Active: true}
     store.SeedAccount(opening)
     store.SeedAccount(cash)
     store.SeedAccount(income)
