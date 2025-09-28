@@ -15,6 +15,7 @@ import (
 // POST /entries/reclassify
 // Body: { user_id, entry_id, date?, memo?, category?, lines }
 func (s *Server) reclassifyEntry(w http.ResponseWriter, r *http.Request) {
+    if !requireJSON(w, r) { return }
     var body struct {
         UserID   uuid.UUID       `json:"user_id"`
         EntryID  uuid.UUID       `json:"entry_id"`

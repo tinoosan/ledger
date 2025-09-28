@@ -164,11 +164,15 @@ func (s *Server) listEntries(w http.ResponseWriter, r *http.Request) {
         if n, err := strconv.Atoi(raw); err == nil && n > 0 && n <= 200 { lim = n }
     }
     cursor := r.URL.Query().Get("cursor")
-    // build window by time
+    // build window by time and additional filters
     window := make([]ledger.JournalEntry, 0, len(entries))
     for _, entry := range entries {
         if from != nil && entry.Date.Before(*from) { continue }
         if to != nil && entry.Date.After(*to) { continue }
+        if query.Currency != "" && !equalsFold(entry.Currency, query.Currency) { continue }
+        if query.Memo != "" && !equalsFold(entry.Memo, query.Memo) { continue }
+        if query.Category != "" && !equalsFold(string(entry.Category), query.Category) { continue }
+        if query.IsReversed != nil && entry.IsReversed != *query.IsReversed { continue }
         window = append(window, entry)
     }
     // start index from cursor

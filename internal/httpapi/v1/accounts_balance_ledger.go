@@ -30,15 +30,19 @@ func (s *Server) getAccountBalance(w http.ResponseWriter, r *http.Request) {
         tt := t.UTC(); asOf = &tt
     }
     // ensure account exists and owned by user
-    if _, err := s.accReader.GetAccount(r.Context(), userID, accountID); err != nil {
+    acc, err := s.accReader.GetAccount(r.Context(), userID, accountID)
+    if err != nil {
         if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return
     }
     balance, err := s.svc.AccountBalance(r.Context(), userID, accountID, asOf)
     if err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: err.Error()}); return }
     balanceMinorUnits, _ := balance.MinorUnits()
-    currency := balance.Curr().Code()
-    resp := map[string]any{"user_id": userID, "account_id": accountID, "as_of": asOf, "currency": currency, "balance_minor": balanceMinorUnits, "balance": balance.Decimal().String()}
+    // Always report account currency
+    currency := acc.Currency
+    // Rebuild decimal string using account currency to avoid mismatches when zero or defaulted
+    displayAmt, _ := money.NewAmountFromMinorUnits(currency, balanceMinorUnits)
+    resp := map[string]any{"user_id": userID, "account_id": accountID, "as_of": asOf, "currency": currency, "balance_minor": balanceMinorUnits, "balance": displayAmt.Decimal().String()}
     toJSON(w, http.StatusOK, resp)
 }
 

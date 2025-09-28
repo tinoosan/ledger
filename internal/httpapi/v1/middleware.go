@@ -11,6 +11,7 @@ import (
     "github.com/govalues/money"
     "github.com/google/uuid"
     "github.com/tinoosan/ledger/internal/meta"
+    "strings"
 )
 
 type ctxKey string
@@ -27,6 +28,7 @@ const ctxKeyTrialBalance ctxKey = "validatedTrialBalance"
 func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            if !requireJSON(w, r) { return }
             var req postEntryRequest
             dec := json.NewDecoder(r.Body)
             dec.DisallowUnknownFields()
@@ -59,8 +61,8 @@ func (s *Server) validatePostEntry() func(http.Handler) http.Handler {
 func (s *Server) validateListEntries() func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            q := r.URL.Query()
-            raw := q.Get("user_id")
+            vals := r.URL.Query()
+            raw := vals.Get("user_id")
             if raw == "" {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
                 return
@@ -70,7 +72,15 @@ func (s *Server) validateListEntries() func(http.Handler) http.Handler {
                 toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
                 return
             }
-            ctx := context.WithValue(r.Context(), ctxKeyListEntries, listEntriesQuery{UserID: userID})
+            leq := listEntriesQuery{UserID: userID}
+            if c := r.URL.Query().Get("currency"); c != "" { leq.Currency = c }
+            if m := r.URL.Query().Get("memo"); m != "" { leq.Memo = m }
+            if cat := r.URL.Query().Get("category"); cat != "" { leq.Category = cat }
+            if ir := r.URL.Query().Get("is_reversed"); ir != "" {
+                if ir == "true" || ir == "1" { b := true; leq.IsReversed = &b }
+                if ir == "false" || ir == "0" { b := false; leq.IsReversed = &b }
+            }
+            ctx := context.WithValue(r.Context(), ctxKeyListEntries, leq)
             next.ServeHTTP(w, r.WithContext(ctx))
         })
     }
@@ -132,6 +142,7 @@ func (s *Server) validateTrialBalance() func(http.Handler) http.Handler {
 func (s *Server) validatePostAccount() func(http.Handler) http.Handler {
     return func(next http.Handler) http.Handler {
         return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+            if !requireJSON(w, r) { return }
             var req postAccountRequest
             dec := json.NewDecoder(r.Body)
             dec.DisallowUnknownFields()
@@ -170,9 +181,19 @@ func (s *Server) validateListAccounts() func(http.Handler) http.Handler {
                 return
             }
             query := listAccountsQuery{UserID: userID}
+            if n := r.URL.Query().Get("name"); n != "" { query.Name = n }
+            if c := r.URL.Query().Get("currency"); c != "" { query.Currency = c }
             if m := r.URL.Query().Get("method"); m != "" { query.Method = m }
             if v := r.URL.Query().Get("vendor"); v != "" { query.Vendor = v }
             if t := r.URL.Query().Get("type"); t != "" { query.Type = t }
+            if sys := r.URL.Query().Get("system"); sys != "" {
+                if sys == "true" || sys == "1" { b := true; query.System = &b }
+                if sys == "false" || sys == "0" { b := false; query.System = &b }
+            }
+            if act := r.URL.Query().Get("active"); act != "" {
+                if act == "true" || act == "1" { b := true; query.Active = &b }
+                if act == "false" || act == "0" { b := false; query.Active = &b }
+            }
             ctx := context.WithValue(r.Context(), ctxKeyListAccounts, query)
             next.ServeHTTP(w, r.WithContext(ctx))
         })
@@ -197,14 +218,14 @@ func toEntryDomain(req postEntryRequest) ledger.JournalEntry {
     // Construct domain JournalEntry with money.Amount lines
     lines := ledger.JournalLines{ByID: make(map[uuid.UUID]*ledger.JournalLine, len(req.Lines))}
     for _, line := range req.Lines {
-        amt, _ := money.NewAmountFromMinorUnits(req.Currency, line.AmountMinor)
+        amt, _ := money.NewAmountFromMinorUnits(strings.ToUpper(req.Currency), line.AmountMinor)
         id := uuid.New()
         lines.ByID[id] = &ledger.JournalLine{ID: id, AccountID: line.AccountID, Side: line.Side, Amount: amt}
     }
     return ledger.JournalEntry{
         UserID:        req.UserID,
         Date:          req.Date,
-        Currency:      req.Currency,
+        Currency:      strings.ToUpper(req.Currency),
         Memo:          req.Memo,
         Category:      req.Category,
         Metadata:      meta.New(req.Metadata),

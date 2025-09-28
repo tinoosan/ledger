@@ -50,6 +50,7 @@ type ItemError struct {
 // creating it if missing (idempotent per (user, currency)).
 func (s *service) EnsureOpeningBalanceAccount(ctx context.Context, userID uuid.UUID, currency string) (ledger.Account, error) {
     if userID == uuid.Nil || currency == "" { return ledger.Account{}, errs.ErrInvalid }
+    currency = strings.ToUpper(currency)
     existing, err := s.repo.ListAccounts(ctx, userID)
     if err != nil { return ledger.Account{}, err }
     for _, a := range existing {
@@ -76,6 +77,8 @@ func (s *service) EnsureOpeningBalanceAccount(ctx context.Context, userID uuid.U
 }
 
 func (s *service) ValidateCreate(account ledger.Account) error {
+    // Normalize currency to uppercase
+    if account.Currency != "" { account.Currency = strings.ToUpper(account.Currency) }
     if account.UserID == uuid.Nil {
         return errs.ErrInvalid
     }
@@ -196,6 +199,8 @@ func (s *service) EnsureAccountsBatch(ctx context.Context, userID uuid.UUID, spe
 }
 
 func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Account, error) {
+    // Normalize currency again to be safe
+    if account.Currency != "" { account.Currency = strings.ToUpper(account.Currency) }
     if err := s.ValidateCreate(account); err != nil {
         return ledger.Account{}, err
     }

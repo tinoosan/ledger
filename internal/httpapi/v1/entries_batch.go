@@ -11,6 +11,9 @@ import (
 // postEntriesBatch handles POST /v1/entries:batch (and /v1/entries/batch)
 // Atomic: all-or-nothing. Returns 201 with {entries:[...]} or 422 with {errors:[...]}
 func (s *Server) postEntriesBatch(w http.ResponseWriter, r *http.Request) {
+    if !requireJSON(w, r) { return }
+    // Require Idempotency-Key for batch endpoints
+    if r.Header.Get("Idempotency-Key") == "" { writeErr(w, http.StatusBadRequest, "idempotency_required", "idempotency_required"); return }
     var req struct{ Entries []postEntryRequest `json:"entries"` }
     dec := json.NewDecoder(r.Body)
     dec.DisallowUnknownFields()
@@ -51,17 +54,5 @@ func (s *Server) postEntriesBatch(w http.ResponseWriter, r *http.Request) {
         toJSON(rw, http.StatusCreated, resp); s.storeBatch(key, h, rw); return
     }
 
-    drafts := make([]ledger.JournalEntry, 0, len(req.Entries))
-    for _, e := range req.Entries { drafts = append(drafts, toEntryDomain(e)) }
-    created, errsList, err := s.svc.CreateEntriesBatch(r.Context(), drafts)
-    if err != nil { writeErr(w, http.StatusBadRequest, err.Error(), ""); return }
-    if len(errsList) > 0 {
-        type item struct{ Index int `json:"index"`; Code string `json:"code"`; Error string `json:"error"` }
-        out := struct{ Errors []item `json:"errors"` }{Errors: make([]item, 0, len(errsList))}
-        for _, e := range errsList { out.Errors = append(out.Errors, item{Index: e.Index, Code: e.Code, Error: e.Err.Error()}) }
-        toJSON(w, http.StatusUnprocessableEntity, out); return
-    }
-    resp := struct{ Entries []entryResponse `json:"entries"` }{Entries: make([]entryResponse, 0, len(created))}
-    for _, e := range created { resp.Entries = append(resp.Entries, toEntryResponse(e)) }
-    toJSON(w, http.StatusCreated, resp)
+    // Should not reach here; enforced above
 }

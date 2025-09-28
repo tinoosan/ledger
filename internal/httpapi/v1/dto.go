@@ -48,6 +48,10 @@ type lineResponse struct {
 // listEntriesQuery holds validated query params for GET /entries.
 type listEntriesQuery struct {
     UserID uuid.UUID
+    Currency string
+    Memo     string
+    Category string
+    IsReversed *bool
 }
 
 // listEntriesResponse wraps entries with cursor for pagination.
@@ -122,7 +126,11 @@ type accountResponse struct {
 
 type listAccountsQuery struct {
     UserID uuid.UUID
+    Name   string
+    Currency string
     Method string
     Vendor string
     Type   string
+    System *bool
+    Active *bool
 }

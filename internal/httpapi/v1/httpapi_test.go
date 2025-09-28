@@ -350,7 +350,7 @@ func TestEntries_Validation422(t *testing.T) {
     rr = httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d", rr.Code) }
     _ = json.Unmarshal(rr.Body.Bytes(), &e)
-    if e.Code != "mixed_currency" { t.Fatalf("expected code mixed_currency, got %q", e.Code) }
+    if e.Code != "currency_mismatch" { t.Fatalf("expected code currency_mismatch, got %q", e.Code) }
 
     // unbalanced
     body["currency"] = "USD"
@@ -560,6 +560,74 @@ func TestAccount_BalanceAndLedger(t *testing.T) {
     if len(l1.Items) != 1 || l1.NextCursor == nil { t.Fatalf("expected 1 item and next_cursor; got: %+v", l1) }
 }
 
+func TestBalance_CurrencyMatchesAccount(t *testing.T) {
+    store, h, userID, _, _ := setup(t)
+    // Create GBP bank account
+    acct := map[string]any{"user_id": userID.String(), "name": "Monzo GBP", "currency": "GBP", "type": "asset", "method": "Bank", "vendor": "Monzo"}
+    b, _ := json.Marshal(acct)
+    req := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
+    req.Header.Set("Content-Type", "application/json")
+    rec := httptest.NewRecorder(); h.ServeHTTP(rec, req)
+    if rec.Code != http.StatusCreated { t.Fatalf("create account expected 201, got %d: %s", rec.Code, rec.Body.String()) }
+    var ar acctResp; _ = json.Unmarshal(rec.Body.Bytes(), &ar)
+
+    // Get OpeningBalances GBP
+    rOb := httptest.NewRequest(http.MethodGet, "/v1/accounts/opening-balances?user_id="+userID.String()+"&currency=GBP", nil)
+    rob := httptest.NewRecorder(); h.ServeHTTP(rob, rOb)
+    if rob.Code != http.StatusOK { t.Fatalf("opening-balances expected 200, got %d: %s", rob.Code, rob.Body.String()) }
+    var ob acctResp; _ = json.Unmarshal(rob.Body.Bytes(), &ob)
+
+    // Post opening entry (GBP)
+    entry := map[string]any{
+        "user_id":  userID.String(),
+        "date":     time.Now().UTC().Format(time.RFC3339),
+        "currency": "GBP",
+        "category": "transfers",
+        "lines": []map[string]any{
+            {"account_id": ar.ID, "side": "debit", "amount_minor": 1000},
+            {"account_id": ob.ID, "side": "credit", "amount_minor": 1000},
+        },
+    }
+    eb, _ := json.Marshal(entry)
+    re := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(eb))
+    re.Header.Set("Content-Type", "application/json")
+    er := httptest.NewRecorder(); h.ServeHTTP(er, re)
+    if er.Code != http.StatusCreated { t.Fatalf("entry expected 201, got %d: %s", er.Code, er.Body.String()) }
+
+    // Balance must report GBP
+    rb := httptest.NewRequest(http.MethodGet, "/v1/accounts/"+ar.ID+"/balance?user_id="+userID.String(), nil)
+    rr := httptest.NewRecorder(); h.ServeHTTP(rr, rb)
+    if rr.Code != http.StatusOK { t.Fatalf("balance expected 200, got %d: %s", rr.Code, rr.Body.String()) }
+    var br struct{ Currency string `json:"currency"` }
+    _ = json.Unmarshal(rr.Body.Bytes(), &br)
+    if br.Currency != "GBP" { t.Fatalf("expected GBP currency in balance, got %s", br.Currency) }
+    // Verify account currency remains GBP in store
+    a, _ := store.AccountByID(nil, userID, uuid.MustParse(ar.ID))
+    if a.Currency != "GBP" { t.Fatalf("account currency changed unexpectedly: %s", a.Currency) }
+}
+
+func TestEntries_CurrencyMismatch422(t *testing.T) {
+    _, h, userID, cash, income := setup(t)
+    // Try to post entry with GBP currency using USD accounts
+    entry := map[string]any{
+        "user_id":  userID.String(),
+        "date":     time.Now().UTC().Format(time.RFC3339),
+        "currency": "GBP",
+        "category": "general",
+        "lines": []map[string]any{
+            {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 100},
+            {"account_id": income.ID.String(), "side": "credit", "amount_minor": 100},
+        },
+    }
+    eb, _ := json.Marshal(entry)
+    re := httptest.NewRequest(http.MethodPost, "/v1/entries", bytes.NewReader(eb))
+    re.Header.Set("Content-Type", "application/json")
+    er := httptest.NewRecorder(); h.ServeHTTP(er, re)
+    if er.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", er.Code, er.Body.String()) }
+    var e errResp; _ = json.Unmarshal(er.Body.Bytes(), &e)
+    if e.Code != "currency_mismatch" { t.Fatalf("expected currency_mismatch code, got %q", e.Code) }
+}
+
 func TestAccounts_InvalidAndSystemGuards(t *testing.T) {
     store, h, userID, _, _ := setup(t)
 
@@ -740,6 +808,7 @@ func TestAccounts_BatchCreate_MixedResults(t *testing.T) {
     b, _ := json.Marshal(payload)
     r := httptest.NewRequest(http.MethodPost, "/v1/accounts/batch", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
+    r.Header.Set("Idempotency-Key", "batch-acc-1")
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String()) }
     var res struct { Errors []struct{ Index int `json:"index"`; Code string `json:"code"`; Error string `json:"error"` } `json:"errors"` }
@@ -786,6 +855,7 @@ func TestEntries_BatchCreate_MixedResults(t *testing.T) {
     b, _ := json.Marshal(payload)
     r := httptest.NewRequest(http.MethodPost, "/v1/entries/batch", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
+    r.Header.Set("Idempotency-Key", "batch-ent-1")
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
     if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String()) }
     var res struct { Errors []struct{ Index int `json:"index"`; Code string `json:"code"`; Error string `json:"error"` } `json:"errors"` }

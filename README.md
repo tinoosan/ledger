@@ -27,16 +27,16 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
   - `GET /healthz` — liveness
   - `GET /readyz` — readiness
 - Entries
-  - `GET /entries?user_id=...` — list
+  - `GET /entries?user_id=...` — list (filters: currency, memo, category, is_reversed)
   - `POST /entries` — create (validates invariants; returns created entry)
-  - `POST /entries/batch` — create many entries in one call
+  - `POST /v1/entries/batch` — create many entries in one call (canonical; requires Idempotency-Key)
   - `GET /entries/{id}?user_id=...` — fetch one
   - `POST /entries/reverse` — reverse an existing entry (flipped lines)
   
 - Accounts
-  - `GET /accounts?user_id=...[&method=&vendor=&type=]` — list (+filters)
+  - `GET /accounts?user_id=...` — list (filters: name, currency, method, vendor, type, system, active)
   - `POST /accounts` — create
-  - `POST /accounts/batch` — create many in one call
+  - `POST /v1/accounts/batch` — create many in one call (canonical; requires Idempotency-Key)
   - `PATCH /accounts/{id}?user_id=...` — update name/method/vendor/metadata
   - `DELETE /accounts/{id}?user_id=...` — soft delete (active=false)
   - `GET /accounts/{id}/balance?user_id=...[&as_of=...]` — signed balance (minor units)
@@ -53,7 +53,8 @@ See OpenAPI for detailed request/response schemas.
   - `id`, `type` (asset/liability/equity/revenue/expense), `currency` never change
 - Editable descriptive fields
   - `name`, path (`type:method:vendor` via `method` + `vendor`), and `metadata`
-  - Path is normalized lowercase and unique per user
+  - Path is normalized lowercase and unique per user (per currency)
+  - OpeningBalances has path `equity:openingbalances`; vendor is `System`
 - Soft deletes only
   - Deactivate by setting `active=false`; no hard deletes
 - System accounts
@@ -67,7 +68,7 @@ See OpenAPI for detailed request/response schemas.
 ## Invariants (Entries)
 
 - At least 2 lines
-- All lines same currency as entry
+- All lines same currency as entry (422 `currency_mismatch` if not)
 - Each line amount > 0
 - Sum(debits) == Sum(credits)
 - All accounts belong to `user_id`
@@ -146,7 +147,7 @@ curl -sS -X POST http://localhost:8080/v1/accounts \
   }'
 ```
 
-Get account balance:
+Get account balance (currency equals account currency):
 
 ```
 curl -sS "http://localhost:8080/accounts/<account_id>/balance?user_id=<user_id>"
@@ -158,23 +159,25 @@ Account ledger (paginated):
 curl -sS "http://localhost:8080/accounts/<account_id>/ledger?user_id=<user_id>&limit=50"
 ```
 
-Trial balance:
+Trial balance (grouped by currency):
 
 ```
 curl -sS "http://localhost:8080/trial-balance?user_id=<user_id>"
 ```
 
-Batch create accounts (with metadata):
+Batch create accounts (with metadata; requires Idempotency-Key):
 
 ```
 curl -sS -X POST http://localhost:8080/v1/accounts/batch \
   -H 'Content-Type: application/json' \
-  -d '[
-    {"user_id": "<user_id>", "name": "Groceries",     "currency": "USD", "type": "expense", "method": "Category", "vendor": "General", "metadata": {"report.tag": "food"}},
-    {"user_id": "<user_id>", "name": "Eating Out",    "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"},
-    {"user_id": "<user_id>", "name": "Transport",     "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"},
-    {"user_id": "<user_id>", "name": "Groceries",     "currency": "GBP", "type": "expense", "method": "Category", "vendor": "General"}
-  ]'
+  -H 'Idempotency-Key: batch-1' \
+  -d '{
+    "user_id": "<user_id>",
+    "accounts": [
+      {"name": "Groceries",  "currency": "USD", "type": "expense", "method": "Category", "vendor": "General", "metadata": {"report.tag": "food"}},
+      {"name": "Eating Out", "currency": "USD", "type": "expense", "method": "Category", "vendor": "General"}
+    ]
+  }'
 ```
 
 Get or create OpeningBalances for a currency:
@@ -209,33 +212,39 @@ This service is intentionally small and explicit. If something feels unclear, it
 - Let apps decide duplicates. The ledger validates and stores balanced entries; it does not dedupe by itself.
 - If you need safe retries, prefer an optional idempotency header your client controls (not a field on the entry).
 - For traceability, keep opaque metadata fields the caller can fill (e.g., source transaction id, import batch, input hash, rule id). The service stores `metadata` as-is and echoes it back.
-Batch create entries:
+Batch create entries (requires Idempotency-Key):
 
 ```
-curl -sS -X POST http://localhost:8080/entries/batch \
+curl -sS -X POST http://localhost:8080/v1/entries/batch \
   -H 'Content-Type: application/json' \
-  -d '[
-    {
-      "user_id": "<user_id>",
-      "date": "2025-09-27T12:00:00Z",
-      "currency": "USD",
-      "memo": "Initial groceries",
-      "category": "groceries",
-      "lines": [
-        { "account_id": "<cash_account_id>",   "side": "credit", "amount_minor": 5000 },
-        { "account_id": "<groceries_account_id>", "side": "debit", "amount_minor": 5000 }
-      ]
-    },
-    {
-      "user_id": "<user_id>",
-      "date": "2025-09-28T08:00:00Z",
-      "currency": "USD",
-      "memo": "Lunch",
-      "category": "eating_out",
-      "lines": [
-        { "account_id": "<cash_account_id>",   "side": "credit", "amount_minor": 1500 },
-        { "account_id": "<eating_out_account_id>", "side": "debit", "amount_minor": 1500 }
-      ]
-    }
-  ]'
+  -H 'Idempotency-Key: batch-2' \
+  -d '{
+    "entries": [
+      {
+        "user_id": "<user_id>",
+        "date": "2025-09-27T12:00:00Z",
+        "currency": "USD",
+        "memo": "Initial groceries",
+        "category": "groceries",
+        "lines": [
+          { "account_id": "<cash_account_id>",   "side": "credit", "amount_minor": 5000 },
+          { "account_id": "<groceries_account_id>", "side": "debit", "amount_minor": 5000 }
+        ]
+      }
+    ]
+  }'
+
+## Idempotency & Batches
+
+- Single-entry POST `/v1/entries`: optional Idempotency-Key; apps decide whether to dedupe
+- Batch POST `/v1/accounts/batch` and `/v1/entries/batch` (canonical): require Idempotency-Key; atomic all-or-nothing; request-level idempotency uses body-hash (409 on mismatch)
+
+## Balance & Trial Balance
+
+- Balance: `GET /v1/accounts/{id}/balance` always returns account currency; `as_of` inclusive
+- Trial balance: grouped by currency; no cross-currency sums
+
+## Metadata Semantics
+
+- `meta.Metadata` validates keys, values, size; `Set` is best-effort; call `Validate()` before persisting
 ```

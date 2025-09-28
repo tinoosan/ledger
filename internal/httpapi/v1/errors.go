@@ -37,7 +37,7 @@ func mapValidationError(err error) (code, msg string) {
     case errors.Is(err, errs.ErrInvalidAmount):
         return "invalid_amount", msg
     case errors.Is(err, errs.ErrMixedCurrency):
-        return "mixed_currency", msg
+        return "currency_mismatch", msg
     case errors.Is(err, errs.ErrUnbalancedEntry):
         return "unbalanced_entry", msg
     default:

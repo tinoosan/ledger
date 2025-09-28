@@ -33,6 +33,22 @@ paths:
           required: true
           schema: { $ref: '#/components/schemas/UUID' }
         - in: query
+          name: currency
+          required: false
+          schema: { type: string }
+        - in: query
+          name: memo
+          required: false
+          schema: { type: string }
+        - in: query
+          name: category
+          required: false
+          schema: { $ref: '#/components/schemas/Category' }
+        - in: query
+          name: is_reversed
+          required: false
+          schema: { type: boolean }
+        - in: query
           name: from
           required: false
           schema: { type: string, format: date-time }
@@ -237,6 +253,14 @@ paths:
           required: true
           schema: { $ref: '#/components/schemas/UUID' }
         - in: query
+          name: name
+          required: false
+          schema: { type: string }
+        - in: query
+          name: currency
+          required: false
+          schema: { type: string }
+        - in: query
           name: method
           required: false
           schema: { type: string }
@@ -248,6 +272,14 @@ paths:
           name: type
           required: false
           schema: { $ref: '#/components/schemas/AccountType' }
+        - in: query
+          name: system
+          required: false
+          schema: { type: boolean }
+        - in: query
+          name: active
+          required: false
+          schema: { type: boolean }
       responses:
         '200': { description: OK, content: { application/json: { schema: { type: array, items: { $ref: '#/components/schemas/AccountResponse' }}}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}

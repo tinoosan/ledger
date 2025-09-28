@@ -45,9 +45,13 @@ func (s *Server) listAccounts(w http.ResponseWriter, r *http.Request) {
     }
     responses := make([]accountResponse, 0, len(accounts))
     for _, account := range accounts {
+        if query.Name   != "" && !equalsFold(account.Name, query.Name) { continue }
+        if query.Currency != "" && !equalsFold(account.Currency, query.Currency) { continue }
         if query.Method != "" && !equalsFold(account.Method, query.Method) { continue }
         if query.Vendor != "" && !equalsFold(account.Vendor, query.Vendor) { continue }
         if query.Type   != "" && !equalsFold(string(account.Type), query.Type) { continue }
+        if query.System != nil && account.System != *query.System { continue }
+        if query.Active != nil && account.Active != *query.Active { continue }
         responses = append(responses, accountResponse{ID: account.ID, UserID: account.UserID, Name: account.Name, Currency: account.Currency, Type: account.Type, Method: account.Method, Vendor: account.Vendor, Path: account.Path(), Metadata: account.Metadata, System: account.System, Active: account.Active})
     }
     toJSON(w, http.StatusOK, responses)

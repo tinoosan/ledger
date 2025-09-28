@@ -11,6 +11,9 @@ import (
 // postAccountsBatch handles POST /v1/accounts:batch (and /v1/accounts/batch)
 // Atomic: all-or-nothing. Returns 201 with {accounts:[...]} or 422 with {errors:[...]}
 func (s *Server) postAccountsBatch(w http.ResponseWriter, r *http.Request) {
+    if !requireJSON(w, r) { return }
+    // Require Idempotency-Key for batch endpoints
+    if r.Header.Get("Idempotency-Key") == "" { writeErr(w, http.StatusBadRequest, "idempotency_required", "idempotency_required"); return }
     var req struct {
         UserID   uuid.UUID           `json:"user_id"`
         Accounts []postAccountRequest `json:"accounts"`
@@ -56,27 +59,7 @@ func (s *Server) postAccountsBatch(w http.ResponseWriter, r *http.Request) {
         toJSON(rw, http.StatusCreated, resp); s.storeBatch(key, h, rw); return
     }
 
-    // Build domain specs
-    specs := make([]ledger.Account, 0, len(req.Accounts))
-    for _, a := range req.Accounts {
-        specs = append(specs, toAccountDomain(a))
-    }
-
-    created, errsList, err := s.accountSvc.EnsureAccountsBatch(r.Context(), req.UserID, specs)
-    if err != nil { writeErr(w, http.StatusBadRequest, err.Error(), ""); return }
-    if len(errsList) > 0 {
-        // shape errors
-        type item struct{ Index int `json:"index"`; Code string `json:"code"`; Error string `json:"error"` }
-        out := struct{ Errors []item `json:"errors"` }{Errors: make([]item, 0, len(errsList))}
-        for _, e := range errsList { out.Errors = append(out.Errors, item{Index: e.Index, Code: e.Code, Error: e.Err.Error()}) }
-        toJSON(w, http.StatusUnprocessableEntity, out); return
-    }
-    // success
-    resp := struct{ Accounts []accountResponse `json:"accounts"` }{Accounts: make([]accountResponse, 0, len(created))}
-    for _, a := range created {
-        resp.Accounts = append(resp.Accounts, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Method: a.Method, Vendor: a.Vendor, Path: a.Path(), Metadata: a.Metadata, System: a.System, Active: a.Active})
-    }
-    toJSON(w, http.StatusCreated, resp)
+    // Should not reach here; enforced above
 }
 
 type captureWriter struct {

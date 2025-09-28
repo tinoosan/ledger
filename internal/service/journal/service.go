@@ -163,7 +163,7 @@ func codeForErr(err error) string {
     case errors.Is(err, errs.ErrInvalidAmount):
         return "invalid_amount"
     case errors.Is(err, errs.ErrMixedCurrency):
-        return "mixed_currency"
+        return "currency_mismatch"
     case errors.Is(err, errs.ErrUnbalancedEntry):
         return "unbalanced_entry"
     case errors.Is(err, errs.ErrAlreadyReversed):
