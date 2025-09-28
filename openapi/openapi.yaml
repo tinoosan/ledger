@@ -83,28 +83,51 @@ paths:
         '422': { description: Unprocessable (validation), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '500': { description: Internal server error, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
-  /entries/batch:
+  /v1/entries/batch:
     post:
       summary: Batch create journal entries
       operationId: batchCreateEntries
       tags: [entries]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+          description: Required for batch idempotency; applies to the entire batch
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: array
-              items: { $ref: '#/components/schemas/JournalEntryRequest' }
+              type: object
+              required: [entries]
+              properties:
+                entries:
+                  type: array
+                  items: { $ref: '#/components/schemas/JournalEntryRequest' }
       responses:
-        '200':
-          description: Per-item results
+        '201':
+          description: Created
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BatchEntryItem'
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: '#/components/schemas/JournalEntryResponse' }
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '415': { description: Unsupported Media Type, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '422':
+          description: Unprocessable (no write; per-item errors)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items: { $ref: '#/components/schemas/BatchErrorItem' }
 
   /entries/{id}:
     get:
@@ -245,23 +268,47 @@ paths:
       summary: Batch create accounts
       operationId: batchCreateAccounts
       tags: [accounts]
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema: { type: string }
+          description: Required for batch idempotency; applies to the entire batch
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              type: array
-              items: { $ref: '#/components/schemas/AccountRequest' }
+              type: object
+              required: [user_id, accounts]
+              properties:
+                user_id: { $ref: '#/components/schemas/UUID' }
+                accounts:
+                  type: array
+                  items: { $ref: '#/components/schemas/AccountRequest' }
       responses:
-        '200':
-          description: Per-item results
+        '201':
+          description: Created
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/BatchAccountItem'
+                type: object
+                properties:
+                  accounts:
+                    type: array
+                    items: { $ref: '#/components/schemas/AccountResponse' }
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '415': { description: Unsupported Media Type, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '422':
+          description: Unprocessable (no write; per-item errors)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  errors:
+                    type: array
+                    items: { $ref: '#/components/schemas/BatchErrorItem' }
 
   /v1/accounts/opening-balances:
     get:
@@ -526,15 +573,12 @@ components:
             active:
               type: boolean
 
-    BatchAccountItem:
+    BatchErrorItem:
       type: object
       properties:
         index: { type: integer }
-        account: { $ref: '#/components/schemas/AccountResponse' }
-        error: { type: string }
         code: { type: string }
-        system:
-          type: boolean
+        error: { type: string }
 
     AccountBalanceResponse:
       type: object
@@ -613,10 +657,4 @@ components:
         error: { type: string }
         code: { type: string }
 
-    BatchEntryItem:
-      type: object
-      properties:
-        index: { type: integer }
-        entry: { $ref: '#/components/schemas/JournalEntryResponse' }
-        error: { type: string }
-        code: { type: string }
+    
