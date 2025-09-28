@@ -25,7 +25,7 @@ func (s *Server) postEntry(w http.ResponseWriter, r *http.Request) {
     // Optional idempotency key header
     idemKey := r.Header.Get("Idempotency-Key")
     if idemKey != "" {
-        if existing, ok, err := s.idemStore.ResolveEntryByIdempotencyKey(r.Context(), entry.UserID, idemKey); err == nil && ok {
+        if existing, ok, err := s.idemStore.GetEntryByIdempotencyKey(r.Context(), entry.UserID, idemKey); err == nil && ok {
             toJSON(w, http.StatusOK, toEntryResponse(existing))
             return
         }
@@ -37,7 +37,7 @@ func (s *Server) postEntry(w http.ResponseWriter, r *http.Request) {
         return
     }
     if idemKey != "" {
-        _ = s.idemStore.SaveEntryIdempotencyKey(r.Context(), saved.UserID, idemKey, saved.ID)
+        _ = s.idemStore.SaveIdempotencyKey(r.Context(), saved.UserID, idemKey, saved.ID)
     }
     // Format response
     resp := toEntryResponse(saved)
@@ -81,7 +81,7 @@ func (s *Server) trialBalance(w http.ResponseWriter, r *http.Request) {
     // Load account details
     accountIDs := make([]uuid.UUID, 0, len(netAmountsByAccount))
     for accountID := range netAmountsByAccount { accountIDs = append(accountIDs, accountID) }
-    accountsByID, err := s.accReader.AccountsByIDs(r.Context(), query.UserID, accountIDs)
+    accountsByID, err := s.accReader.FetchAccounts(r.Context(), query.UserID, accountIDs)
     if err != nil {
         toJSON(w, http.StatusInternalServerError, errorResponse{Error: "failed to load accounts"})
         return

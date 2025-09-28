@@ -43,7 +43,7 @@ func (s *Server) updateAccount(w http.ResponseWriter, r *http.Request) {
         return
     }
     // load current, apply patch in http layer
-    acc, err := s.accReader.AccountByID(r.Context(), userID, id)
+    acc, err := s.accReader.GetAccount(r.Context(), userID, id)
     if err != nil {
         if errors.Is(err, errs.ErrNotFound) { notFound(w) } else { writeErr(w, http.StatusInternalServerError, "failed to load account", "") }
         return

@@ -74,6 +74,11 @@ func (s *Store) AccountsByIDs(_ context.Context, userID uuid.UUID, ids []uuid.UU
     return out, nil
 }
 
+// FetchAccounts is an alias to AccountsByIDs to satisfy httpapi.AccountReader.
+func (s *Store) FetchAccounts(ctx context.Context, userID uuid.UUID, ids []uuid.UUID) (map[uuid.UUID]ledger.Account, error) {
+    return s.AccountsByIDs(ctx, userID, ids)
+}
+
 // CreateJournalEntry implements httpapi.Writer.
 func (s *Store) CreateJournalEntry(_ context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error) {
     s.mu.Lock()
@@ -99,12 +104,22 @@ func (s *Store) EntriesByUserID(_ context.Context, userID uuid.UUID) ([]ledger.J
     return out, nil
 }
 
+// ListEntries is an alias to EntriesByUserID to satisfy httpapi.EntryReader.
+func (s *Store) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error) {
+    return s.EntriesByUserID(ctx, userID)
+}
+
 // EntryByID returns a single entry for a user.
 func (s *Store) EntryByID(_ context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error) {
     s.mu.RLock(); defer s.mu.RUnlock()
     e, ok := s.entries[entryID]
     if !ok || e.UserID != userID { return ledger.JournalEntry{}, errs.ErrNotFound }
     return *e, nil
+}
+
+// GetEntry is an alias to EntryByID to satisfy httpapi.EntryReader.
+func (s *Store) GetEntry(ctx context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error) {
+    return s.EntryByID(ctx, userID, entryID)
 }
 
 // EntryByClientID resolves entry via client entry id.
@@ -123,6 +138,11 @@ func (s *Store) AccountsByUserID(_ context.Context, userID uuid.UUID) ([]ledger.
     return out, nil
 }
 
+// ListAccounts is an alias to AccountsByUserID to satisfy httpapi.AccountReader.
+func (s *Store) ListAccounts(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error) {
+    return s.AccountsByUserID(ctx, userID)
+}
+
 // CreateAccount persists a new account.
 func (s *Store) CreateAccount(_ context.Context, a ledger.Account) (ledger.Account, error) {
     s.mu.Lock()
@@ -137,6 +157,11 @@ func (s *Store) AccountByID(_ context.Context, userID, accountID uuid.UUID) (led
     a, ok := s.accounts[accountID]
     if !ok || a.UserID != userID { return ledger.Account{}, errs.ErrNotFound }
     return a, nil
+}
+
+// GetAccount is an alias to AccountByID to satisfy httpapi.AccountReader.
+func (s *Store) GetAccount(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error) {
+    return s.AccountByID(ctx, userID, accountID)
 }
 
 // UpdateAccount persists changes to an account.
@@ -169,6 +194,16 @@ func (s *Store) SaveEntryIdempotencyKey(_ context.Context, userID uuid.UUID, key
         m[key] = entryID
     }
     return nil
+}
+
+// GetEntryByIdempotencyKey implements httpapi.IdempotencyStore.
+func (s *Store) GetEntryByIdempotencyKey(ctx context.Context, userID uuid.UUID, key string) (ledger.JournalEntry, bool, error) {
+    return s.ResolveEntryByIdempotencyKey(ctx, userID, key)
+}
+
+// SaveIdempotencyKey implements httpapi.IdempotencyStore.
+func (s *Store) SaveIdempotencyKey(ctx context.Context, userID uuid.UUID, key string, entryID uuid.UUID) error {
+    return s.SaveEntryIdempotencyKey(ctx, userID, key, entryID)
 }
 
 // insertEntryIndexLocked inserts k into the per-user sorted index, keeping order asc by (Date, ID).
