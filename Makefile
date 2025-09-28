@@ -1,13 +1,21 @@
-.PHONY: dev build
+.PHONY: dev build dev-jq dev-jq-save api-validate api-docs api-docs-stop
 
 dev:
 	@which air >/dev/null 2>&1 || (echo "air not installed. Install: go install github.com/air-verse/air@latest" && exit 1)
 	air -c .air.toml
 
+# Run air and pretty-print JSON logs with jq
+dev-jq:
+	@which air >/dev/null 2>&1 || (echo "air not installed. Install: go install github.com/air-verse/air@latest" && exit 1)
+	stdbuf -oL -eL air -c .air.toml 2>&1 | jq -R 'fromjson? | .'
+
+# Run air, save raw logs, and pretty-print JSON logs
+dev-jq-save:
+	@which air >/dev/null 2>&1 || (echo "air not installed. Install: go install github.com/air-verse/air@latest" && exit 1)
+	stdbuf -oL -eL air -c .air.toml 2>&1 | tee air.raw.log | jq -R 'fromjson? | .'
+
 build:
 	go build ./...
-
-.PHONY: api-validate api-docs api-docs-stop
 
 # Validate OpenAPI using openapitools/openapi-generator-cli (requires Docker)
 api-validate:

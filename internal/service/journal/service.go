@@ -34,6 +34,7 @@ type Service interface {
     Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine, metadata map[string]string) (ledger.JournalEntry, error)
     TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error)
     AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error)
+    CreateEntriesBatch(ctx context.Context, drafts []ledger.JournalEntry) ([]ledger.JournalEntry, []ItemError, error)
 }
 
 type service struct {
@@ -42,6 +43,13 @@ type service struct {
 }
 
 func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer: writer} }
+
+// ItemError mirrors account batch; defined here to keep package-level independence.
+type ItemError struct {
+    Index int
+    Code  string
+    Err   error
+}
 
 func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) error {
     if entry.UserID == uuid.Nil {
@@ -102,6 +110,67 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
         i++
     }
     return nil
+}
+
+// CreateEntriesBatch validates all drafts and, if valid, creates them all.
+// If any item fails validation, no entry is created and per-item errors are returned.
+func (s *service) CreateEntriesBatch(ctx context.Context, drafts []ledger.JournalEntry) ([]ledger.JournalEntry, []ItemError, error) {
+    errsList := make([]ItemError, 0)
+    // validate all
+    for i, d := range drafts {
+        if err := s.ValidateEntry(ctx, d); err != nil {
+            errsList = append(errsList, ItemError{Index: i, Code: codeForErr(err), Err: err})
+        }
+    }
+    if len(errsList) > 0 { return nil, errsList, nil }
+    // create all under transaction if available
+    type txBeginner interface{ BeginTx(context.Context) (interface{ CreateJournalEntry(context.Context, ledger.JournalEntry) (ledger.JournalEntry, error); Commit(context.Context) error; Rollback(context.Context) error }, error) }
+    if b, ok := s.writer.(txBeginner); ok {
+        tx, err := b.BeginTx(ctx)
+        if err != nil { return nil, nil, err }
+        created := make([]ledger.JournalEntry, 0, len(drafts))
+        for _, d := range drafts {
+            e := ledger.JournalEntry{
+                ID:       uuid.New(),
+                UserID:   d.UserID,
+                Date:     d.Date,
+                Currency: d.Currency,
+                Memo:     d.Memo,
+                Category: d.Category,
+                Metadata: d.Metadata,
+                Lines:    d.Lines,
+            }
+            if _, err := tx.CreateJournalEntry(ctx, e); err != nil { _ = tx.Rollback(ctx); return nil, nil, err }
+            created = append(created, e)
+        }
+        if err := tx.Commit(ctx); err != nil { return nil, nil, err }
+        return created, nil, nil
+    }
+    // Fallback (non-tx)
+    created := make([]ledger.JournalEntry, 0, len(drafts))
+    for _, d := range drafts {
+        e, err := s.CreateEntry(ctx, d)
+        if err != nil { return nil, nil, err }
+        created = append(created, e)
+    }
+    return created, nil, nil
+}
+
+func codeForErr(err error) string {
+    switch {
+    case errors.Is(err, errs.ErrTooFewLines):
+        return "too_few_lines"
+    case errors.Is(err, errs.ErrInvalidAmount):
+        return "invalid_amount"
+    case errors.Is(err, errs.ErrMixedCurrency):
+        return "mixed_currency"
+    case errors.Is(err, errs.ErrUnbalancedEntry):
+        return "unbalanced_entry"
+    case errors.Is(err, errs.ErrAlreadyReversed):
+        return "already_reversed"
+    default:
+        return "validation_error"
+    }
 }
 
 func (s *service) CreateEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error) {

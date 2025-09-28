@@ -18,5 +18,5 @@ time = true
 # Optional env for local dev; override via your shell as needed
 [env]
 # LOG_FORMAT = "text"   # json|text (default json if unset)
-# LOG_LEVEL = "DEBUG"   # DEBUG|INFO|WARNING|ERROR
+LOG_LEVEL = "DEBUG"   # DEBUG|INFO|WARNING|ERROR
 

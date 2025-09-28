@@ -10,6 +10,7 @@ import (
     "log/slog"
     "github.com/tinoosan/ledger/internal/service/journal"
     "github.com/tinoosan/ledger/internal/service/account"
+    "sync"
 )
 
 // Server wires handlers and middleware using Chi.
@@ -20,6 +21,8 @@ type Server struct {
     accReader AccountReader
     entryReader EntryReader
     idemStore IdempotencyStore
+    batchIdemMu sync.RWMutex
+    batchIdem   map[string]storedBatch
     log    *slog.Logger
     rt     *chi.Mux
 }
@@ -38,6 +41,7 @@ func New(accReader AccountReader, entryReader EntryReader, idem IdempotencyStore
         accReader:  accReader,
         entryReader: entryReader,
         idemStore:  idem,
+        batchIdem:  make(map[string]storedBatch),
         rt:         r,
         log:        logger,
     }
@@ -56,6 +60,7 @@ func (s *Server) routes() {
     // Entries (v1)
     s.rt.With(s.validatePostEntry()).Post("/v1/entries", s.postEntry)
     s.rt.Post("/v1/entries/batch", s.postEntriesBatch)
+    s.rt.Post("/v1/entries:batch", s.postEntriesBatch)
     s.rt.With(s.validateListEntries()).Get("/v1/entries", s.listEntries)
     s.rt.Get("/v1/entries/{id}", s.getEntry)
     s.rt.With(s.validateReverseEntry()).Post("/v1/entries/reverse", s.reverseEntry)
@@ -64,6 +69,7 @@ func (s *Server) routes() {
     // Accounts (v1)
     s.rt.With(s.validatePostAccount()).Post("/v1/accounts", s.postAccount)
     s.rt.Post("/v1/accounts/batch", s.postAccountsBatch)
+    s.rt.Post("/v1/accounts:batch", s.postAccountsBatch)
     s.rt.With(s.validateListAccounts()).Get("/v1/accounts", s.listAccounts)
     s.rt.Get("/v1/accounts/{id}", s.getAccount)
     s.rt.Get("/v1/accounts/{id}/balance", s.getAccountBalance)

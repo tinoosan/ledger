@@ -3,56 +3,91 @@ package v1
 import (
     "encoding/json"
     "net/http"
-    "errors"
-
-    "github.com/tinoosan/ledger/internal/service/account"
-    "github.com/tinoosan/ledger/internal/errs"
+    "github.com/google/uuid"
+    "github.com/tinoosan/ledger/internal/ledger"
+    "github.com/tinoosan/ledger/internal/meta"
 )
 
-// postAccountsBatch handles POST /accounts/batch
-// Accepts an array of account requests and attempts to create each, returning per-item results.
+// postAccountsBatch handles POST /v1/accounts:batch (and /v1/accounts/batch)
+// Atomic: all-or-nothing. Returns 201 with {accounts:[...]} or 422 with {errors:[...]}
 func (s *Server) postAccountsBatch(w http.ResponseWriter, r *http.Request) {
-    var reqs []postAccountRequest
+    var req struct {
+        UserID   uuid.UUID           `json:"user_id"`
+        Accounts []postAccountRequest `json:"accounts"`
+    }
     dec := json.NewDecoder(r.Body)
     dec.DisallowUnknownFields()
-    if err := dec.Decode(&reqs); err != nil {
-        toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON: "+err.Error()})
-        return
-    }
-    if len(reqs) == 0 {
-        toJSON(w, http.StatusBadRequest, errorResponse{Error: "empty payload"})
-        return
-    }
-    type item struct {
-        Index   int               `json:"index"`
-        Account *accountResponse  `json:"account,omitempty"`
-        Error   string            `json:"error,omitempty"`
-        Code    string            `json:"code,omitempty"`
-    }
-    results := make([]item, 0, len(reqs))
-    for i, rreq := range reqs {
-        acc := toAccountDomain(rreq)
-        if err := s.accountSvc.ValidateCreate(acc); err != nil {
-            results = append(results, item{Index: i, Error: err.Error(), Code: "invalid"})
-            continue
+    if err := dec.Decode(&req); err != nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid JSON: "+err.Error()}); return }
+    if req.UserID == uuid.Nil { toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"}); return }
+    if len(req.Accounts) == 0 { toJSON(w, http.StatusBadRequest, errorResponse{Error: "accounts is required"}); return }
+    if len(req.Accounts) > 100 { unprocessable(w, "too_many_items", "too_many_items"); return }
+
+    // Idempotency for batch (optional)
+    if key := r.Header.Get("Idempotency-Key"); key != "" {
+        // normalize body for stable hash
+        type normAccount struct{ UserID uuid.UUID `json:"user_id"`; Name string `json:"name"`; Currency string `json:"currency"`; Method string `json:"method"`; Vendor string `json:"vendor"`; Type ledger.AccountType `json:"type"`; Metadata meta.Metadata `json:"metadata,omitempty"` }
+        type normAcct struct{ UserID uuid.UUID `json:"user_id"`; Accounts []normAccount `json:"accounts"` }
+        n := normAcct{UserID: req.UserID, Accounts: make([]normAccount, 0, len(req.Accounts))}
+        for _, a := range req.Accounts { n.Accounts = append(n.Accounts, normAccount{UserID: req.UserID, Name: a.Name, Currency: a.Currency, Method: a.Method, Vendor: a.Vendor, Type: a.Type, Metadata: meta.New(a.Metadata)}) }
+        nb, _ := json.Marshal(n)
+        h := hashBytes(nb)
+        s.batchIdemMu.RLock()
+        if prev, ok := s.batchIdem[key]; ok {
+            if prev.BodyHash == h { s.batchIdemMu.RUnlock(); w.WriteHeader(prev.Status); _, _ = w.Write(prev.Payload); return }
+            s.batchIdemMu.RUnlock(); conflict(w, "idempotency_mismatch"); return
         }
-        created, err := s.accountSvc.Create(r.Context(), acc)
-        if err != nil {
-            switch {
-            case errors.Is(err, account.ErrPathExists):
-                results = append(results, item{Index: i, Error: err.Error(), Code: "conflict"})
-            case errors.Is(err, errs.ErrInvalid):
-                results = append(results, item{Index: i, Error: "invalid", Code: "invalid"})
-            case errors.Is(err, errs.ErrUnprocessable):
-                results = append(results, item{Index: i, Error: "validation_error", Code: "validation_error"})
-            default:
-                results = append(results, item{Index: i, Error: err.Error(), Code: "error"})
-            }
-            continue
+        s.batchIdemMu.RUnlock()
+        // wrap response writer to capture payload
+        rw := &captureWriter{ResponseWriter: w}
+        // continue processing with rw; at the end store
+        // Build domain specs
+        specs := make([]ledger.Account, 0, len(req.Accounts))
+        for _, a := range req.Accounts { specs = append(specs, toAccountDomain(a)) }
+        created, errsList, err := s.accountSvc.EnsureAccountsBatch(r.Context(), req.UserID, specs)
+        if err != nil { writeErr(rw, http.StatusBadRequest, err.Error(), ""); s.storeBatch(key, h, rw); return }
+        if len(errsList) > 0 {
+            type item struct{ Index int `json:"index"`; Code string `json:"code"`; Error string `json:"error"` }
+            out := struct{ Errors []item `json:"errors"` }{Errors: make([]item, 0, len(errsList))}
+            for _, e := range errsList { out.Errors = append(out.Errors, item{Index: e.Index, Code: e.Code, Error: e.Err.Error()}) }
+            toJSON(rw, http.StatusUnprocessableEntity, out); s.storeBatch(key, h, rw); return
         }
-        ar := accountResponse{ID: created.ID, UserID: created.UserID, Name: created.Name, Currency: created.Currency, Type: created.Type, Method: created.Method, Vendor: created.Vendor, Path: created.Path(), Metadata: created.Metadata, System: created.System, Active: created.Active}
-        results = append(results, item{Index: i, Account: &ar})
+        resp := struct{ Accounts []accountResponse `json:"accounts"` }{Accounts: make([]accountResponse, 0, len(created))}
+        for _, a := range created { resp.Accounts = append(resp.Accounts, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Method: a.Method, Vendor: a.Vendor, Path: a.Path(), Metadata: a.Metadata, System: a.System, Active: a.Active}) }
+        toJSON(rw, http.StatusCreated, resp); s.storeBatch(key, h, rw); return
     }
-    toJSON(w, http.StatusOK, results)
+
+    // Build domain specs
+    specs := make([]ledger.Account, 0, len(req.Accounts))
+    for _, a := range req.Accounts {
+        specs = append(specs, toAccountDomain(a))
+    }
+
+    created, errsList, err := s.accountSvc.EnsureAccountsBatch(r.Context(), req.UserID, specs)
+    if err != nil { writeErr(w, http.StatusBadRequest, err.Error(), ""); return }
+    if len(errsList) > 0 {
+        // shape errors
+        type item struct{ Index int `json:"index"`; Code string `json:"code"`; Error string `json:"error"` }
+        out := struct{ Errors []item `json:"errors"` }{Errors: make([]item, 0, len(errsList))}
+        for _, e := range errsList { out.Errors = append(out.Errors, item{Index: e.Index, Code: e.Code, Error: e.Err.Error()}) }
+        toJSON(w, http.StatusUnprocessableEntity, out); return
+    }
+    // success
+    resp := struct{ Accounts []accountResponse `json:"accounts"` }{Accounts: make([]accountResponse, 0, len(created))}
+    for _, a := range created {
+        resp.Accounts = append(resp.Accounts, accountResponse{ID: a.ID, UserID: a.UserID, Name: a.Name, Currency: a.Currency, Type: a.Type, Method: a.Method, Vendor: a.Vendor, Path: a.Path(), Metadata: a.Metadata, System: a.System, Active: a.Active})
+    }
+    toJSON(w, http.StatusCreated, resp)
 }
 
+type captureWriter struct {
+    http.ResponseWriter
+    status int
+    buf    []byte
+}
+
+func (w *captureWriter) WriteHeader(code int) { w.status = code; w.ResponseWriter.WriteHeader(code) }
+func (w *captureWriter) Write(b []byte) (int, error) { w.buf = append(w.buf, b...); return w.ResponseWriter.Write(b) }
+
+func (s *Server) storeBatch(key, bodyHash string, rw *captureWriter) {
+    s.batchIdemMu.Lock(); s.batchIdem[key] = storedBatch{BodyHash: bodyHash, Status: rw.status, Payload: append([]byte(nil), rw.buf...)}; s.batchIdemMu.Unlock()
+}

@@ -4,6 +4,7 @@ package memory
 // It keeps code paths easy to follow while allowing us to plug in a real DB later.
 import (
     "context"
+    "strings"
     "sort"
     "sync"
     "time"
@@ -231,6 +232,51 @@ func (s *Store) GetEntryByIdempotencyKey(ctx context.Context, userID uuid.UUID, 
 func (s *Store) SaveIdempotencyKey(ctx context.Context, userID uuid.UUID, key string, entryID uuid.UUID) error {
     return s.SaveEntryIdempotencyKey(ctx, userID, key, entryID)
 }
+
+// Batch transaction support (copy-on-write for created entities)
+type batchTx struct {
+    s        *Store
+    accounts []ledger.Account
+    entries  []ledger.JournalEntry
+}
+
+func (s *Store) BeginTx(_ context.Context) (*batchTx, error) {
+    return &batchTx{s: s, accounts: []ledger.Account{}, entries: []ledger.JournalEntry{}}, nil
+}
+
+func (tx *batchTx) CreateAccount(_ context.Context, a ledger.Account) (ledger.Account, error) {
+    tx.accounts = append(tx.accounts, a)
+    return a, nil
+}
+
+func (tx *batchTx) CreateJournalEntry(_ context.Context, e ledger.JournalEntry) (ledger.JournalEntry, error) {
+    tx.entries = append(tx.entries, e)
+    return e, nil
+}
+
+func (tx *batchTx) Commit(_ context.Context) error {
+    tx.s.mu.Lock(); defer tx.s.mu.Unlock()
+    // Check account conflicts and apply
+    for _, a := range tx.accounts {
+        for _, existing := range tx.s.accounts {
+            if existing.UserID == a.UserID && existing.Currency == a.Currency && strings.EqualFold(existing.Path(), a.Path()) {
+                return errs.ErrConflict
+            }
+        }
+    }
+    for _, a := range tx.accounts {
+        ca := cloneAccount(a)
+        tx.s.accounts[a.ID] = ca
+    }
+    for _, e := range tx.entries {
+        ce := cloneEntry(e)
+        tx.s.entries[e.ID] = &ce
+        tx.s.insertEntryIndexLocked(e.UserID, entryKey{Date: e.Date, ID: e.ID})
+    }
+    return nil
+}
+
+func (tx *batchTx) Rollback(_ context.Context) error { return nil }
 
 // insertEntryIndexLocked inserts k into the per-user sorted index, keeping order asc by (Date, ID).
 // Caller must hold s.mu (write lock).

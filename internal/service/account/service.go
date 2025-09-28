@@ -29,6 +29,7 @@ type Service interface {
     Update(ctx context.Context, a ledger.Account) (ledger.Account, error)
     Deactivate(ctx context.Context, userID, accountID uuid.UUID) error
     EnsureOpeningBalanceAccount(ctx context.Context, userID uuid.UUID, currency string) (ledger.Account, error)
+    EnsureAccountsBatch(ctx context.Context, userID uuid.UUID, specs []ledger.Account) ([]ledger.Account, []ItemError, error)
 }
 
 type service struct {
@@ -37,6 +38,13 @@ type service struct {
 }
 
 func New(repo Repo, writer Writer) Service { return &service{repo: repo, writer: writer} }
+
+// ItemError represents a per-item failure in a batch operation.
+type ItemError struct {
+    Index int
+    Code  string
+    Err   error
+}
 
 // EnsureOpeningBalanceAccount returns the OpeningBalances system account for the currency,
 // creating it if missing (idempotent per (user, currency)).
@@ -99,6 +107,92 @@ func (s *service) ValidateCreate(account ledger.Account) error {
         }
     }
     return nil
+}
+
+// EnsureAccountsBatch validates all specs and, if valid, creates them all.
+// If any item fails validation or conflicts, no account is created and per-item errors are returned.
+func (s *service) EnsureAccountsBatch(ctx context.Context, userID uuid.UUID, specs []ledger.Account) ([]ledger.Account, []ItemError, error) {
+    if userID == uuid.Nil { return nil, nil, errs.ErrInvalid }
+    // Normalize and validate all first
+    errsList := make([]ItemError, 0)
+    normalized := make([]ledger.Account, len(specs))
+    for i, in := range specs {
+        in.UserID = userID
+        // Normalize path casing
+        in.Method = strings.TrimSpace(in.Method)
+        in.Vendor = strings.TrimSpace(in.Vendor)
+        in.Currency = strings.ToUpper(strings.TrimSpace(in.Currency))
+        normalized[i] = in
+        if err := s.ValidateCreate(in); err != nil {
+            errsList = append(errsList, ItemError{Index: i, Code: "validation_error", Err: err})
+            continue
+        }
+    }
+    if len(errsList) > 0 { return nil, errsList, nil }
+    // Ensure OpeningBalances per currency exist
+    seenCurr := map[string]struct{}{}
+    for _, a := range normalized {
+        if _, ok := seenCurr[a.Currency]; ok { continue }
+        if _, err := s.EnsureOpeningBalanceAccount(ctx, userID, a.Currency); err != nil {
+            return nil, nil, err
+        }
+        seenCurr[a.Currency] = struct{}{}
+    }
+    // Uniqueness validation against current state
+    existing, err := s.repo.ListAccounts(ctx, userID)
+    if err != nil { return nil, nil, err }
+    // detect intra-batch duplicates and conflicts with existing
+    seen := make(map[string]int)
+    for i, a := range normalized {
+        desired := normalizedPathString(a) + "|" + strings.ToUpper(a.Currency)
+        if prevIdx, ok := seen[desired]; ok {
+            errsList = append(errsList, ItemError{Index: i, Code: "conflict", Err: ErrPathExists})
+            errsList = append(errsList, ItemError{Index: prevIdx, Code: "conflict", Err: ErrPathExists})
+            continue
+        }
+        seen[desired] = i
+        for _, other := range existing {
+            if other.UserID == userID && strings.EqualFold(normalizedPathString(other), normalizedPathString(a)) && strings.EqualFold(other.Currency, a.Currency) {
+                errsList = append(errsList, ItemError{Index: i, Code: "conflict", Err: ErrPathExists})
+                break
+            }
+        }
+    }
+    if len(errsList) > 0 { return nil, errsList, nil }
+    // All good: create all under transaction if available
+    type txBeginner interface{ BeginTx(context.Context) (interface{ CreateAccount(context.Context, ledger.Account) (ledger.Account, error); Commit(context.Context) error; Rollback(context.Context) error }, error) }
+    if b, ok := s.writer.(txBeginner); ok {
+        tx, err := b.BeginTx(ctx)
+        if err != nil { return nil, nil, err }
+        created := make([]ledger.Account, 0, len(normalized))
+        for _, a := range normalized {
+            acc := ledger.Account{
+                ID:       uuid.New(),
+                UserID:   a.UserID,
+                Name:     a.Name,
+                Currency: a.Currency,
+                Type:     a.Type,
+                Method:   a.Method,
+                Vendor:   a.Vendor,
+                System:   a.System,
+                Active:   true,
+                Metadata: a.Metadata,
+            }
+            if acc.Type == ledger.AccountTypeEquity && strings.EqualFold(acc.Method, "OpeningBalances") { acc.Vendor = "System"; acc.System = true }
+            if _, err := tx.CreateAccount(ctx, acc); err != nil { _ = tx.Rollback(ctx); return nil, nil, err }
+            created = append(created, acc)
+        }
+        if err := tx.Commit(ctx); err != nil { return nil, nil, err }
+        return created, nil, nil
+    }
+    // Fallback (non-tx)
+    created := make([]ledger.Account, 0, len(normalized))
+    for _, a := range normalized {
+        acc, err := s.Create(ctx, a)
+        if err != nil { return nil, nil, err }
+        created = append(created, acc)
+    }
+    return created, nil, nil
 }
 
 func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Account, error) {

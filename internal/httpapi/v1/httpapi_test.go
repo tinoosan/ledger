@@ -728,74 +728,67 @@ func TestOpeningBalances_EndpointCreatesPerCurrency(t *testing.T) {
 func TestAccounts_BatchCreate_MixedResults(t *testing.T) {
     _, h, userID, _, _ := setup(t)
 
-    // First item valid, second item duplicate (same path/currency), third invalid (missing fields)
-    items := []map[string]any{
-        {"user_id": userID.String(), "name": "Wallet 1", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket", "metadata": map[string]any{"source": "seed"}},
-        {"user_id": userID.String(), "name": "Wallet 2", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket"},
-        {"user_id": userID.String(), "name": "", "currency": "", "type": "asset", "method": "", "vendor": ""},
+    // First item valid, second duplicate (same path/currency), third invalid
+    payload := map[string]any{
+        "user_id": userID.String(),
+        "accounts": []map[string]any{
+            {"name": "Wallet 1", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket", "metadata": map[string]any{"source": "seed"}},
+            {"name": "Wallet 2", "currency": "USD", "type": "asset", "method": "Cash", "vendor": "Pocket"},
+            {"name": "", "currency": "", "type": "asset", "method": "", "vendor": ""},
+        },
     }
-    b, _ := json.Marshal(items)
+    b, _ := json.Marshal(payload)
     r := httptest.NewRequest(http.MethodPost, "/v1/accounts/batch", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
-    if rr.Code != http.StatusOK { t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String()) }
-    var res []struct {
-        Index   int        `json:"index"`
-        Account *acctResp  `json:"account"`
-        Error   string     `json:"error"`
-        Code    string     `json:"code"`
-    }
+    if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String()) }
+    var res struct { Errors []struct{ Index int `json:"index"`; Code string `json:"code"`; Error string `json:"error"` } `json:"errors"` }
     _ = json.Unmarshal(rr.Body.Bytes(), &res)
-    if len(res) != 3 { t.Fatalf("expected 3 results, got %d", len(res)) }
-    if res[0].Account == nil || res[0].Error != "" { t.Fatalf("first should succeed: %+v", res[0]) }
-    if res[1].Account != nil || res[1].Code == "" { t.Fatalf("second should fail with conflict: %+v", res[1]) }
-    if res[2].Account != nil || res[2].Code != "invalid" { t.Fatalf("third should be invalid: %+v", res[2]) }
+    if len(res.Errors) < 1 { t.Fatalf("expected errors, got: %+v", res) }
 }
 
 func TestEntries_BatchCreate_MixedResults(t *testing.T) {
     _, h, userID, cash, income := setup(t)
 
-    // First valid USD, second invalid (GBP currency for USD accounts), third too few lines
-    items := []map[string]any{
-        {
-            "user_id":  userID.String(),
-            "date":     time.Now().UTC().Format(time.RFC3339),
-            "currency": "USD",
-            "category": "general",
-            "lines": []map[string]any{
-                {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 100},
-                {"account_id": income.ID.String(), "side": "credit", "amount_minor": 100},
+    payload := map[string]any{
+        "entries": []map[string]any{
+            {
+                "user_id":  userID.String(),
+                "date":     time.Now().UTC().Format(time.RFC3339),
+                "currency": "USD",
+                "category": "general",
+                "lines": []map[string]any{
+                    {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 100},
+                    {"account_id": income.ID.String(), "side": "credit", "amount_minor": 100},
+                },
             },
-        },
-        {
-            "user_id":  userID.String(),
-            "date":     time.Now().UTC().Format(time.RFC3339),
-            "currency": "GBP",
-            "category": "general",
-            "lines": []map[string]any{
-                {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 100},
-                {"account_id": income.ID.String(), "side": "credit", "amount_minor": 100},
+            {
+                "user_id":  userID.String(),
+                "date":     time.Now().UTC().Format(time.RFC3339),
+                "currency": "GBP",
+                "category": "general",
+                "lines": []map[string]any{
+                    {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 100},
+                    {"account_id": income.ID.String(), "side": "credit", "amount_minor": 100},
+                },
             },
-        },
-        {
-            "user_id":  userID.String(),
-            "date":     time.Now().UTC().Format(time.RFC3339),
-            "currency": "USD",
-            "category": "general",
-            "lines": []map[string]any{
-                {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 100},
+            {
+                "user_id":  userID.String(),
+                "date":     time.Now().UTC().Format(time.RFC3339),
+                "currency": "USD",
+                "category": "general",
+                "lines": []map[string]any{
+                    {"account_id": cash.ID.String(), "side": "debit", "amount_minor": 100},
+                },
             },
         },
     }
-    b, _ := json.Marshal(items)
+    b, _ := json.Marshal(payload)
     r := httptest.NewRequest(http.MethodPost, "/v1/entries/batch", bytes.NewReader(b))
     r.Header.Set("Content-Type", "application/json")
     rr := httptest.NewRecorder(); h.ServeHTTP(rr, r)
-    if rr.Code != http.StatusOK { t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String()) }
-    var res []struct { Index int `json:"index"`; Entry *entryResp `json:"entry"`; Error string `json:"error"`; Code string `json:"code"` }
+    if rr.Code != http.StatusUnprocessableEntity { t.Fatalf("expected 422, got %d: %s", rr.Code, rr.Body.String()) }
+    var res struct { Errors []struct{ Index int `json:"index"`; Code string `json:"code"`; Error string `json:"error"` } `json:"errors"` }
     _ = json.Unmarshal(rr.Body.Bytes(), &res)
-    if len(res) != 3 { t.Fatalf("expected 3 results, got %d", len(res)) }
-    if res[0].Entry == nil || res[0].Error != "" { t.Fatalf("first should succeed: %+v", res[0]) }
-    if res[1].Entry != nil || res[1].Code != "mixed_currency" { t.Fatalf("second should be mixed_currency: %+v", res[1]) }
-    if res[2].Entry != nil || res[2].Code != "too_few_lines" { t.Fatalf("third should be too_few_lines: %+v", res[2]) }
+    if len(res.Errors) < 2 { t.Fatalf("expected errors, got: %+v", res) }
 }
