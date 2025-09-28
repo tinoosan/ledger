@@ -35,7 +35,7 @@ func main() {
     store.SeedAccount(income)
     logger.Info("DEV seed", "user_id", user.ID.String(), "cash_account_id", cash.ID.String(), "income_account_id", income.ID.String())
 
-    srvMux := httpapi.New(store, store, store, store, store, store, logger).Handler()
+    srvMux := httpapi.New(store, store, store, store, store, store, store, logger).Handler()
 
 	srv := &http.Server{
 		Addr:              ":8080",

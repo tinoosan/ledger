@@ -41,12 +41,4 @@ type Repository interface {
     IdempotencyStore
 }
 
-// Writer abstracts write-side operations needed by the API.
-type Writer interface {
-    // CreateJournalEntry persists the entry and its lines atomically.
-    CreateJournalEntry(ctx context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error)
-    // CreateAccount persists a new account.
-    CreateAccount(ctx context.Context, a ledger.Account) (ledger.Account, error)
-    // UpdateAccount persists account changes.
-    UpdateAccount(ctx context.Context, a ledger.Account) (ledger.Account, error)
-}
+// Writer interfaces are provided by services directly (journal.Writer, account.Writer).

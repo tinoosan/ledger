@@ -59,7 +59,7 @@ func setup(t *testing.T) (*memory.Store, http.Handler, uuid.UUID, ledger.Account
     income := ledger.Account{ID: uuid.New(), UserID: user.ID, Name: "Income", Currency: "USD", Type: ledger.AccountTypeRevenue, Method: "Salary", Vendor: "Employer"}
     store.SeedAccount(cash)
     store.SeedAccount(income)
-    h := New(store, store, store, store, store, store, testLogger()).Handler()
+    h := New(store, store, store, store, store, store, store, testLogger()).Handler()
     return store, h, user.ID, cash, income
 }
 

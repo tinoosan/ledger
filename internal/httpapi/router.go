@@ -26,15 +26,15 @@ type Server struct {
 
 // New constructs the HTTP server with routes and middleware.
 // The logger is used by basic request/response logging and panic recovery.
-func New(accReader AccountReader, entryReader EntryReader, idem IdempotencyStore, jrepo journal.Repo, arepo account.Repo, writer Writer, logger *slog.Logger) *Server {
+func New(accReader AccountReader, entryReader EntryReader, idem IdempotencyStore, jrepo journal.Repo, arepo account.Repo, jwriter journal.Writer, awriter account.Writer, logger *slog.Logger) *Server {
     r := chi.NewRouter()
     r.Use(chimw.RequestID)
     r.Use(requestLogger(logger))
     r.Use(recoverer(logger))
 
     s := &Server{
-        svc:        journal.New(jrepo, writer),
-        accountSvc: account.New(arepo, writer),
+        svc:        journal.New(jrepo, jwriter),
+        accountSvc: account.New(arepo, awriter),
         accReader:  accReader,
         entryReader: entryReader,
         idemStore:  idem,
