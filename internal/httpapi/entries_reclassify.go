@@ -21,6 +21,7 @@ func (s *Server) reclassifyEntry(w http.ResponseWriter, r *http.Request) {
         Date     *time.Time      `json:"date,omitempty"`
         Memo     *string         `json:"memo,omitempty"`
         Category *ledger.Category `json:"category,omitempty"`
+        Metadata map[string]string `json:"metadata,omitempty"`
         Lines    []postEntryLine `json:"lines"`
     }
     dec := json.NewDecoder(r.Body)
@@ -47,7 +48,7 @@ func (s *Server) reclassifyEntry(w http.ResponseWriter, r *http.Request) {
         domLines = append(domLines, ledger.JournalLine{AccountID: ln.AccountID, Side: ln.Side, Amount: amt})
     }
     // call service
-    saved, err := s.svc.Reclassify(r.Context(), body.UserID, body.EntryID, when, memo, cat, domLines)
+    saved, err := s.svc.Reclassify(r.Context(), body.UserID, body.EntryID, when, memo, cat, domLines, body.Metadata)
     if err != nil {
         // 404 detection
         if errors.Is(err, errs.ErrNotFound) { notFound(w); return }

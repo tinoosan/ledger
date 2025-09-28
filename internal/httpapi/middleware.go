@@ -178,8 +178,6 @@ func toAccountDomain(req postAccountRequest) ledger.Account {
     }
 }
 
-// writeError moved to errors.go as writeErr
-
 
 func toEntryDomain(req postEntryRequest) ledger.JournalEntry {
     // Construct domain JournalEntry with money.Amount lines
@@ -195,6 +193,7 @@ func toEntryDomain(req postEntryRequest) ledger.JournalEntry {
         Currency:      req.Currency,
         Memo:          req.Memo,
         Category:      req.Category,
+        Metadata:      req.Metadata,
         Lines:         lines,
     }
 }

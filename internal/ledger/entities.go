@@ -88,14 +88,16 @@ func (a Account) Path() string {
 
 // JournalEntry captures metadata for a collection of journal lines.
 type JournalEntry struct {
-	ID            uuid.UUID
-	UserID        uuid.UUID
-	Date          time.Time
-	Currency      string
-	Memo          string
-	Category      Category
-	ClientEntryID string
-	Lines         JournalLines
+    ID            uuid.UUID
+    UserID        uuid.UUID
+    Date          time.Time
+    Currency      string
+    Memo          string
+    Category      Category
+    ClientEntryID string
+    // Metadata holds additional key-value attributes for the entry.
+    Metadata      map[string]string
+    Lines         JournalLines
 }
 
 // JournalLines groups the set of lines that belong to a journal entry.

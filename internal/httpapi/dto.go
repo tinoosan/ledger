@@ -13,6 +13,7 @@ type postEntryRequest struct {
     Currency      string          `json:"currency"`
     Memo          string          `json:"memo"`
     Category      ledger.Category `json:"category"`
+    Metadata      map[string]string `json:"metadata,omitempty"`
     Lines         []postEntryLine `json:"lines"`
 }
 
@@ -30,6 +31,7 @@ type entryResponse struct {
     Currency      string          `json:"currency"`
     Memo          string          `json:"memo"`
     Category      ledger.Category `json:"category"`
+    Metadata      map[string]string `json:"metadata,omitempty"`
     Lines         []lineResponse  `json:"lines"`
 }
 

@@ -30,7 +30,7 @@ type Service interface {
     CreateEntry(ctx context.Context, e ledger.JournalEntry) (ledger.JournalEntry, error)
     ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error)
     ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, date time.Time) (ledger.JournalEntry, error)
-    Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine) (ledger.JournalEntry, error)
+    Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine, metadata map[string]string) (ledger.JournalEntry, error)
     TrialBalance(ctx context.Context, userID uuid.UUID, asOf *time.Time) (map[uuid.UUID]money.Amount, error)
     AccountBalance(ctx context.Context, userID, accountID uuid.UUID, asOf *time.Time) (money.Amount, error)
 }
@@ -122,6 +122,7 @@ func (s *service) CreateEntry(ctx context.Context, entry ledger.JournalEntry) (l
         Currency:      entry.Currency,
         Memo:          entry.Memo,
         Category:      entry.Category,
+        Metadata:      entry.Metadata,
         Lines:         lines,
     }
     return s.writer.CreateJournalEntry(ctx, entry)
@@ -169,7 +170,7 @@ func (s *service) ReverseEntry(ctx context.Context, userID, entryID uuid.UUID, d
 
 // Reclassify posts a reversing entry for the original, then a correcting entry with provided lines.
 // Returns the correcting entry.
-func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine) (ledger.JournalEntry, error) {
+func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, date time.Time, memo string, category ledger.Category, newLines []ledger.JournalLine, metadata map[string]string) (ledger.JournalEntry, error) {
     if userID == uuid.Nil || entryID == uuid.Nil {
         return ledger.JournalEntry{}, errs.ErrInvalid
     }
@@ -190,7 +191,7 @@ func (s *service) Reclassify(ctx context.Context, userID, entryID uuid.UUID, dat
         ln.EntryID = uuid.Nil
         lines.ByID[id] = &ln
     }
-    e := ledger.JournalEntry{UserID: userID, Date: date, Currency: orig.Currency, Memo: memo, Category: category, Lines: lines}
+    e := ledger.JournalEntry{UserID: userID, Date: date, Currency: orig.Currency, Memo: memo, Category: category, Metadata: metadata, Lines: lines}
     if err := s.ValidateEntry(ctx, e); err != nil { return ledger.JournalEntry{}, err }
     return s.CreateEntry(ctx, e)
 }
