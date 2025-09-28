@@ -33,6 +33,11 @@ type IdempotencyStore interface {
     SaveIdempotencyKey(ctx context.Context, userID uuid.UUID, key string, entryID uuid.UUID) error
 }
 
+// ReadyChecker is optionally implemented by stores to indicate readiness.
+type ReadyChecker interface {
+    Ready(ctx context.Context) error
+}
+
 // Repository composes the read-side operations used by the API.
 // It is a convenience union satisfied by the in-memory store.
 type Repository interface {

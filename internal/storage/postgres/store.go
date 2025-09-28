@@ -43,6 +43,9 @@ func Open(ctx context.Context, dsn string) (*Store, error) {
 // Close releases the underlying pool.
 func (s *Store) Close() { if s.pool != nil { s.pool.Close() } }
 
+// Ready pings the pool to verify connectivity.
+func (s *Store) Ready(ctx context.Context) error { return s.pool.Ping(ctx) }
+
 // SeedDev inserts a single user and three accounts (Opening Balances, Cash, Income)
 // for quick local testing. It is idempotent per run due to fresh UUIDs.
 func (s *Store) SeedDev(ctx context.Context) (ledger.User, []ledger.Account, error) {

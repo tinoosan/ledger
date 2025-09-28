@@ -101,4 +101,4 @@ db-down:
 
 db-migrate:
 	@psql "postgresql://$(DB_USER):$(DB_PASSWORD)@localhost:$(DB_PORT)/$(DB_NAME)?sslmode=disable" -f db/migrations/0001_init.sql
-	@echo "Migrations applied."
+	@echo "Init applied."

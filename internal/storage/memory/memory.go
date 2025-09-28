@@ -44,6 +44,9 @@ func New() *Store {
     }
 }
 
+// Ready implements a no-op readiness check for memory store.
+func (s *Store) Ready(ctx context.Context) error { return nil }
+
 // clone helpers to avoid shared state exposure
 func cloneAccount(a ledger.Account) ledger.Account {
     cloned := a

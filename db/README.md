@@ -2,12 +2,13 @@ Postgres Setup (Local)
 
 - Start a Postgres container:
   - `docker run --name ledger-pg -e POSTGRES_PASSWORD=postgres -e POSTGRES_USER=postgres -e POSTGRES_DB=ledger -p 5432:5432 -d postgres:16`
-- Apply migrations:
+- Apply init SQL (pre-0.1.0 we keep a single init file):
   - `psql postgresql://postgres:postgres@localhost:5432/ledger -f db/migrations/0001_init.sql`
 - DSN examples:
   - `DATABASE_URL=postgresql://postgres:postgres@localhost:5432/ledger?sslmode=disable`
 
 Notes
+- Until v0.1.0 we evolve `0001_init.sql` in-place; no separate migration files.
 - The schema enforces key invariants: account type, side enums, positive minor units, user scoping, and uniqueness over (user, group, vendor, type, currency).
 - Service-level normalization still applies (group lower-cased, vendor slugging). The DB index uses lower("group"), lower(vendor) for stability.
 - Lines store `amount_minor` only. Currency comes from the parent entry; code reconstructs `money.Amount` using the entry’s currency.

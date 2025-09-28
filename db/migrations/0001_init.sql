@@ -69,3 +69,42 @@ create table if not exists entry_idempotency (
     primary key (user_id, key),
     constraint fk_idem_entry foreign key (entry_id) references entries(id) on delete cascade
 );
+
+-- Updated_at triggers to keep timestamps fresh on UPDATE
+create or replace function set_updated_at()
+returns trigger as $$
+begin
+  new.updated_at := now();
+  return new;
+end;
+$$ language plpgsql;
+
+do $$ begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'trg_accounts_set_updated_at'
+  ) then
+    create trigger trg_accounts_set_updated_at
+    before update on accounts
+    for each row execute procedure set_updated_at();
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'trg_entries_set_updated_at'
+  ) then
+    create trigger trg_entries_set_updated_at
+    before update on entries
+    for each row execute procedure set_updated_at();
+  end if;
+end $$;
+
+do $$ begin
+  if not exists (
+    select 1 from pg_trigger where tgname = 'trg_entry_lines_set_updated_at'
+  ) then
+    create trigger trg_entry_lines_set_updated_at
+    before update on entry_lines
+    for each row execute procedure set_updated_at();
+  end if;
+end $$;
