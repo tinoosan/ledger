@@ -157,7 +157,7 @@ paths:
         '422': { description: Unprocessable (validation), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
 
-  /trial-balance:
+  /v1/trial-balance:
     get:
       summary: Trial balance
       operationId: trialBalance
@@ -179,7 +179,7 @@ paths:
               schema: { $ref: '#/components/schemas/TrialBalanceResponse' }
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
-  /accounts:
+  /v1/accounts:
     get:
       summary: List accounts
       operationId: listAccounts
@@ -217,7 +217,7 @@ paths:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
-  /accounts/batch:
+  /v1/accounts/batch:
     post:
       summary: Batch create accounts
       operationId: batchCreateAccounts
@@ -240,7 +240,7 @@ paths:
                   $ref: '#/components/schemas/BatchAccountItem'
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
-  /accounts/opening-balances:
+  /v1/accounts/opening-balances:
     get:
       summary: Get or create the Opening Balances account for a currency
       operationId: getOpeningBalancesAccount
@@ -258,7 +258,7 @@ paths:
         '200': { description: OK, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
-  /accounts/{id}:
+  /v1/accounts/{id}:
     get:
       summary: Get an account
       operationId: getAccount
@@ -317,7 +317,7 @@ paths:
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
-  /accounts/{id}/balance:
+  /v1/accounts/{id}/balance:
     get:
       summary: Get account balance
       operationId: getAccountBalance
@@ -340,7 +340,7 @@ paths:
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
-  /accounts/{id}/ledger:
+  /v1/accounts/{id}/ledger:
     get:
       summary: Get account ledger feed
       operationId: getAccountLedger
