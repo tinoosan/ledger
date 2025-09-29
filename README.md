@@ -332,3 +332,7 @@ curl -sS -X POST http://localhost:8080/v1/accounts/batch \
 The DB auto-initializes using `db/migrations/0001_init.sql` on first run.
 
 Release planning and pre-v0.1.0 tasks are tracked as GitHub issues.
+
+## License
+
+This project is licensed under the Mozilla Public License 2.0 (MPL-2.0). See `LICENSE`.
