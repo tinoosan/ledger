@@ -292,7 +292,10 @@ Wiring example (later):
 - `DEV_SEED`: `true|1|yes` to insert a dev user and a few accounts (Postgres mode). Always enabled for memory mode.
 - `LOG_FORMAT`: `json` (default) or `text`
 - `LOG_LEVEL`: `DEBUG | INFO | WARNING | ERROR`
- - `MAX_BODY_BYTES`: maximum request body size in bytes (default 1048576)
+- `MAX_BODY_BYTES`: maximum request body size in bytes (default 1048576)
+- `JWT_HS256_SECRET`: when set, enables Authorization: Bearer JWT (HS256) auth middleware
+- `JWT_ISSUER`: optional expected `iss` claim
+- `JWT_AUDIENCE`: optional expected `aud` claim (string or array)
 
 ## Idempotency (How To Test)
 
@@ -332,6 +335,21 @@ curl -sS -X POST http://localhost:8080/v1/accounts/batch \
 The DB auto-initializes using `db/migrations/0001_init.sql` on first run.
 
 Release planning and pre-v0.1.0 tasks are tracked as GitHub issues.
+
+## Authentication (Service-to-Service)
+
+- When `JWT_HS256_SECRET` is set, all endpoints require `Authorization: Bearer <jwt>` except:
+  - `GET /healthz`, `GET /readyz`, `GET /v1/openapi.yaml`, and `GET /v1/dictionary/*`
+- Token must be HS256 signed; optional claims validated if configured: `iss` (JWT_ISSUER) and `aud` (JWT_AUDIENCE). `exp`/`nbf` respected when present.
+- In dev, omit `JWT_HS256_SECRET` to disable auth while iterating.
+
+Example (generate a token in Node.js):
+
+```
+const jwt = require('jsonwebtoken');
+const token = jwt.sign({ iss: 'ledger', aud: 'internal', sub: 'service-A' }, process.env.JWT_HS256_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
+console.log(token);
+```
 
 ## License
 
