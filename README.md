@@ -17,7 +17,7 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
 
 ## API Docs
 
-- OpenAPI spec: `openapi/openapi.yaml` (also served at `GET /openapi.yaml`)
+- OpenAPI spec: `openapi/openapi.yaml` (also served at `GET /v1/openapi.yaml`)
 - Swagger UI via Docker: `make api-docs` → http://localhost:8081 (stop with `make api-docs-stop`)
 - Validate spec: `make api-validate` (Docker) or `./tmp/bin/validate openapi/openapi.yaml` (installed during validation step)
 
@@ -27,23 +27,25 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
   - `GET /healthz` — liveness
   - `GET /readyz` — readiness
 - Entries
-  - `GET /entries?user_id=...` — list (filters: currency, memo, category, is_reversed)
-  - `POST /entries` — create (validates invariants; returns created entry)
+  - `GET /v1/entries?user_id=...` — list (filters: currency, memo, category, is_reversed)
+  - `POST /v1/entries` — create (validates invariants; returns created entry)
   - `POST /v1/entries/batch` — create many entries in one call (canonical; requires Idempotency-Key)
-  - `GET /entries/{id}?user_id=...` — fetch one
-  - `POST /entries/reverse` — reverse an existing entry (flipped lines)
+  - `GET /v1/entries/{id}?user_id=...` — fetch one
+  - `POST /v1/entries/reverse` — reverse an existing entry (flipped lines)
   
 - Accounts
-- `GET /accounts?user_id=...` — list (filters: name, currency, group, vendor, type, system, active)
-  - `POST /accounts` — create
+  - `GET /v1/accounts?user_id=...` — list (filters: name, currency, group, vendor, type, system, active)
+  - `POST /v1/accounts` — create
   - `POST /v1/accounts/batch` — create many in one call (canonical; requires Idempotency-Key)
-- `PATCH /accounts/{id}?user_id=...` — update name/group/vendor/metadata
+  - `PATCH /v1/accounts/{id}?user_id=...` — update name/group/vendor/metadata
   - `DELETE /accounts/{id}?user_id=...` — soft delete (active=false)
   - `GET /accounts/{id}/balance?user_id=...[&as_of=...]` — signed balance (minor units)
   - `GET /accounts/{id}/ledger?user_id=...[&from=&to=&limit=&cursor=]` — paginated feed with running balance
   - `GET /accounts/opening-balances?user_id=...&currency=...` — returns the currency-matched OpeningBalances account (creates if missing)
 - Reports
   - `GET /trial-balance?user_id=...[&as_of=...]` — net debit/credit per account grouped by currency
+ - Dictionary
+   - `GET /v1/dictionary/groups[?type=...]` — curated groups per account type
 
 See OpenAPI for detailed request/response schemas.
 
@@ -54,12 +56,12 @@ See OpenAPI for detailed request/response schemas.
 - Editable descriptive fields
 - `name`, path (`type:group:vendor` via `group` + `vendor`), and `metadata`
   - Path is normalized lowercase and unique per user (per currency)
-  - OpeningBalances has path `equity:openingbalances`; vendor is `System`
+  - OpeningBalances has path `equity:opening_balances`; vendor is `System`
 - Soft deletes only
   - Deactivate by setting `active=false`; no hard deletes
 - System accounts
   - `system=true` → forbid PATCH/DELETE
-  - Reserved: `Equity:OpeningBalances` (path `equity:openingbalances:system`)
+  - Reserved: `Equity:OpeningBalances` (path `equity:opening_balances:system`)
   - Created automatically for a user when their first account is created
   - Immutable identity; used for initial balances and migrations
 - Misclassification
@@ -80,7 +82,7 @@ Replace placeholders with your seeded IDs (printed at startup) or your own.
 Create an entry (with metadata):
 
 ```
-curl -sS -X POST http://localhost:8080/entries \
+curl -sS -X POST http://localhost:8080/v1/entries \
   -H 'Content-Type: application/json' \
   -d '{
     "user_id": "<user_id>",
@@ -105,7 +107,7 @@ curl -sS -X POST http://localhost:8080/entries \
 Create an entry with an idempotency header (safe retries):
 
 ```
-curl -sS -X POST http://localhost:8080/entries \
+curl -sS -X POST http://localhost:8080/v1/entries \
   -H 'Content-Type: application/json' \
   -H 'Idempotency-Key: <opaque-key-from-client>' \
   -d '{
@@ -126,7 +128,7 @@ If the same `Idempotency-Key` is reused for the same `user_id`, the server respo
 Reverse an entry:
 
 ```
-curl -sS -X POST http://localhost:8080/entries/reverse \
+curl -sS -X POST http://localhost:8080/v1/entries/reverse \
   -H 'Content-Type: application/json' \
   -d '{ "user_id": "<user_id>", "entry_id": "<entry_id>" }'
 ```
@@ -195,6 +197,7 @@ curl -sS "http://localhost:8080/v1/accounts/opening-balances?user_id=<user_id>&c
 - `internal/storage/memory` — in-memory repo+writer for dev/tests
 - `internal/ledger` — domain entities (Account, JournalEntry, etc.)
 - `openapi/openapi.yaml` — OpenAPI 3.0 spec
+  - Also served at `GET /v1/openapi.yaml`
 
 ## Development & Testing
 
@@ -289,6 +292,7 @@ Wiring example (later):
 - `DEV_SEED`: `true|1|yes` to insert a dev user and a few accounts (Postgres mode). Always enabled for memory mode.
 - `LOG_FORMAT`: `json` (default) or `text`
 - `LOG_LEVEL`: `DEBUG | INFO | WARNING | ERROR`
+ - `MAX_BODY_BYTES`: maximum request body size in bytes (default 1048576)
 
 ## Idempotency (How To Test)
 
