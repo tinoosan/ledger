@@ -25,7 +25,7 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
 
 - Health/ops
   - `GET /healthz` — liveness
-- `GET /readyz` — readiness
+  - `GET /readyz` — readiness
   - `GET /metrics` — Prometheus metrics (counters and histograms)
 - Entries
   - `GET /v1/entries?user_id=...` — list (filters: currency, memo, category, is_reversed)
@@ -46,8 +46,8 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
   - `GET /accounts/opening-balances?user_id=...&currency=...` — returns the currency-matched OpeningBalances account (creates if missing)
 - Reports
   - `GET /trial-balance?user_id=...[&as_of=...]` — net debit/credit per account grouped by currency
- - Dictionary
-   - `GET /v1/dictionary/groups[?type=...]` — curated groups per account type
+- Dictionary
+  - `GET /v1/dictionary/groups[?type=...]` — curated groups per account type
 
 See OpenAPI for detailed request/response schemas.
 
@@ -106,6 +106,7 @@ curl -sS -X POST http://localhost:8080/v1/entries \
       { "account_id": "<income_account_id>", "side": "credit", "amount_minor": 1500 }
     ]
   }'
+```
 
 Create an entry with an idempotency header (safe retries):
 
@@ -126,7 +127,6 @@ curl -sS -X POST http://localhost:8080/v1/entries \
   }'
 ```
 If the same `Idempotency-Key` is reused for the same `user_id`, the server responds `200 OK` with the original entry instead of creating a duplicate.
-```
 
 Reverse an entry:
 
