@@ -13,47 +13,51 @@ import (
 )
 
 type JWTClaims struct {
-    Issuer    string `json:"iss,omitempty"`
-    Subject   string `json:"sub,omitempty"`
-    Audience  any    `json:"aud,omitempty"` // string or []string
-    ExpiresAt int64  `json:"exp,omitempty"`
-    NotBefore int64  `json:"nbf,omitempty"`
-    IssuedAt  int64  `json:"iat,omitempty"`
+	Issuer    string `json:"iss,omitempty"`
+	Subject   string `json:"sub,omitempty"`
+	Audience  any    `json:"aud,omitempty"` // string or []string
+	ExpiresAt int64  `json:"exp,omitempty"`
+	NotBefore int64  `json:"nbf,omitempty"`
+	IssuedAt  int64  `json:"iat,omitempty"`
 }
 
 func parseBearerToken(r *http.Request) (string, bool) {
-    h := r.Header.Get("Authorization")
-    if h == "" { return "", false }
-    if !strings.HasPrefix(h, "Bearer ") && !strings.HasPrefix(h, "bearer ") { return "", false }
-    return strings.TrimSpace(h[len("Bearer "):]), true
+	h := r.Header.Get("Authorization")
+	if h == "" {
+		return "", false
+	}
+	if !strings.HasPrefix(h, "Bearer ") && !strings.HasPrefix(h, "bearer ") {
+		return "", false
+	}
+	return strings.TrimSpace(h[len("Bearer "):]), true
 }
 
 func base64URLDecode(s string) ([]byte, error) {
-    // JWT uses base64url without padding
-    if m := len(s) % 4; m != 0 {
-        s += strings.Repeat("=", 4-m)
-    }
-    return base64.URLEncoding.DecodeString(s)
+	// JWT uses base64url without padding
+	if m := len(s) % 4; m != 0 {
+		s += strings.Repeat("=", 4-m)
+	}
+	return base64.URLEncoding.DecodeString(s)
 }
 
 func verifyHS256(token, secret string) (JWTClaims, error) {
-    var empty JWTClaims
-    parts := strings.Split(token, ".")
-    if len(parts) != 3 {
-        return empty, errors.New("invalid token format")
-    }
-    headerB, err := base64URLDecode(parts[0])
-    if err != nil {
-        return empty, errors.New("bad header b64")
-    }
-    payloadB, err := base64URLDecode(parts[1])
-    if err != nil {
-        return empty, errors.New("bad payload b64")
-    }
-    sigB, err := base64URLDecode(parts[2])
-    if err != nil {
-        return empty, errors.New("bad signature b64")
-    }
+	var empty JWTClaims
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return empty, errors.New("invalid token format")
+	}
+	headerB, err := base64URLDecode(parts[0])
+	if err != nil {
+		return empty, errors.New("bad header b64")
+	}
+	payloadB, err := base64URLDecode(parts[1])
+	if err != nil {
+		return empty, errors.New("bad payload b64")
+	}
+	sigB, err := base64URLDecode(parts[2])
+	if err != nil {
+		return empty, errors.New("bad signature b64")
+	}
 
 	// Expect alg HS256
 	var hdr struct{ Alg, Typ string }
@@ -73,11 +77,11 @@ func verifyHS256(token, secret string) (JWTClaims, error) {
 		return empty, errors.New("invalid signature")
 	}
 
-    var claims JWTClaims
-    if err := json.Unmarshal(payloadB, &claims); err != nil {
-        return empty, errors.New("bad claims json")
-    }
-    return claims, nil
+	var claims JWTClaims
+	if err := json.Unmarshal(payloadB, &claims); err != nil {
+		return empty, errors.New("bad claims json")
+	}
+	return claims, nil
 }
 
 func audContains(aud any, expected string) bool {
@@ -124,33 +128,33 @@ func authJWTFromEnv() func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
-            tok, ok := parseBearerToken(r)
+			tok, ok := parseBearerToken(r)
 			if !ok {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-            claims, err := verifyHS256(tok, secret)
+			claims, err := verifyHS256(tok, secret)
 			if err != nil {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
 			now := time.Now().Unix()
-            if claims.NotBefore != 0 && now < claims.NotBefore {
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
-            if claims.ExpiresAt != 0 && now >= claims.ExpiresAt {
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
-            if iss != "" && !strings.EqualFold(claims.Issuer, iss) {
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
-            if aud != "" && !audContains(claims.Audience, aud) {
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
+			if claims.NotBefore != 0 && now < claims.NotBefore {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if claims.ExpiresAt != 0 && now >= claims.ExpiresAt {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if iss != "" && !strings.EqualFold(claims.Issuer, iss) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if aud != "" && !audContains(claims.Audience, aud) {
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 			next.ServeHTTP(w, r)
 		})
 	}

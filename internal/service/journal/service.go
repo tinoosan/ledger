@@ -62,16 +62,16 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
 		return errs.ErrTooFewLines
 	}
 
-    ids := make([]uuid.UUID, 0, len(entry.Lines.ByID))
+	ids := make([]uuid.UUID, 0, len(entry.Lines.ByID))
 	var sumDebits, sumCredits int64
 	i := 0
 	for _, line := range entry.Lines.ByID {
 		if line.AccountID == uuid.Nil {
-            return lineFieldError(i, "account_id required")
+			return lineFieldError(i, "account_id required")
 		}
 		units, _ := line.Amount.MinorUnits()
 		if units <= 0 {
-            return errs.ErrInvalidAmount
+			return errs.ErrInvalidAmount
 		}
 		switch line.Side {
 		case ledger.SideDebit:
@@ -79,7 +79,7 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
 		case ledger.SideCredit:
 			sumCredits += units
 		default:
-            return lineFieldError(i, "side must be debit or credit")
+			return lineFieldError(i, "side must be debit or credit")
 		}
 		ids = append(ids, line.AccountID)
 		i++
@@ -92,20 +92,20 @@ func (s *service) ValidateEntry(ctx context.Context, entry ledger.JournalEntry) 
 	if err != nil {
 		return err
 	}
-    if len(accMap) != len(uniqueUUIDs(ids)) {
-        return errors.New("unknown or unauthorized accounts")
-    }
+	if len(accMap) != len(uniqueUUIDs(ids)) {
+		return errors.New("unknown or unauthorized accounts")
+	}
 	i = 0
 	for _, line := range entry.Lines.ByID {
 		acc, ok := accMap[line.AccountID]
 		if !ok {
-            return lineFieldError(i, "account not found for user")
+			return lineFieldError(i, "account not found for user")
 		}
 		if acc.UserID != entry.UserID {
-            return lineFieldError(i, "account does not belong to user")
+			return lineFieldError(i, "account does not belong to user")
 		}
 		if acc.Currency != entry.Currency {
-            return errs.ErrMixedCurrency
+			return errs.ErrMixedCurrency
 		}
 		i++
 	}
@@ -400,7 +400,9 @@ func (s *service) AccountBalance(ctx context.Context, userID, accountID uuid.UUI
 	return net, nil
 }
 
-func lineFieldError(i int, msg string) error { return errors.New("line[" + intToString(i) + "]: " + msg) }
+func lineFieldError(i int, msg string) error {
+	return errors.New("line[" + intToString(i) + "]: " + msg)
+}
 
 func uniqueUUIDs(ids []uuid.UUID) []uuid.UUID {
 	seen := make(map[uuid.UUID]struct{}, len(ids))
