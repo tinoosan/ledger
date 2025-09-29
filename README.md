@@ -40,6 +40,7 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
   - `POST /v1/accounts/batch` — create many in one call (canonical; requires Idempotency-Key)
   - `PATCH /v1/accounts/{id}?user_id=...` — update name/group/vendor/metadata
   - `DELETE /accounts/{id}?user_id=...` — soft delete (active=false)
+  - `POST /v1/accounts/{id}/reactivate?user_id=...` — reactivate a soft-deleted account (active=true)
   - `GET /accounts/{id}/balance?user_id=...[&as_of=...]` — signed balance (minor units)
   - `GET /accounts/{id}/ledger?user_id=...[&from=&to=&limit=&cursor=]` — paginated feed with running balance
   - `GET /accounts/opening-balances?user_id=...&currency=...` — returns the currency-matched OpeningBalances account (creates if missing)
@@ -60,6 +61,7 @@ See OpenAPI for detailed request/response schemas.
   - OpeningBalances has path `equity:opening_balances`; vendor is `System`
 - Soft deletes only
   - Deactivate by setting `active=false`; no hard deletes
+  - Uniqueness across soft deletes: `(user_id, path, currency)` stays unique even when an account is inactive. Creating a new account with the same triple returns `409` with code `account_exists_soft_deleted`. Reactivate the prior account instead.
 - System accounts
   - `system=true` → forbid PATCH/DELETE
   - Reserved: `Equity:OpeningBalances` (path `equity:opening_balances:system`)
@@ -257,6 +259,12 @@ curl -sS -X POST http://localhost:8080/v1/entries/batch \
       }
     ]
   }'
+
+Reactivate a soft-deleted account:
+
+```
+curl -sS -X POST "http://localhost:8080/v1/accounts/<account_id>/reactivate?user_id=<user_id>"
+```
 
 ## Idempotency & Batches
 

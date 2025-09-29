@@ -333,6 +333,10 @@ paths:
       responses:
         '201': { description: Created, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '409': { description: Conflict (duplicate path). If the conflict is with a soft-deleted account, code is `account_exists_soft_deleted`.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' } }
 
   /v1/accounts/batch:
     post:
@@ -553,6 +557,26 @@ paths:
         '204': { description: No Content }
         '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
         '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+
+  /v1/accounts/{id}/reactivate:
+    post:
+      summary: Reactivate a soft-deleted account (active=true)
+      operationId: reactivateAccount
+      tags: [accounts]
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+        - in: query
+          name: user_id
+          required: true
+          schema: { $ref: '#/components/schemas/UUID' }
+      responses:
+        '200': { description: Reactivated, content: { application/json: { schema: { $ref: '#/components/schemas/AccountResponse' }}}}
+        '400': { description: Bad request, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '403': { description: Forbidden (system account), content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
+        '404': { description: Not found, content: { application/json: { schema: { $ref: '#/components/schemas/Error' }}}}
 
   /v1/accounts/{id}/balance:
     get:
