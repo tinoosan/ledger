@@ -32,19 +32,21 @@ type Server struct {
 // New constructs the HTTP server with routes and middleware.
 // The logger is used by basic request/response logging and panic recovery.
 func New(accReader AccountReader, entryReader EntryReader, idem IdempotencyStore, jrepo journal.Repo, arepo account.Repo, jwriter journal.Writer, awriter account.Writer, logger *slog.Logger) *Server {
-    r := chi.NewRouter()
-    r.Use(chimw.RequestID)
-    // Limit request body size (default 1 MiB; override via MAX_BODY_BYTES)
+	r := chi.NewRouter()
+	r.Use(chimw.RequestID)
+	// Limit request body size (default 1 MiB; override via MAX_BODY_BYTES)
 	var maxBody int64 = 1 << 20
 	if v := os.Getenv("MAX_BODY_BYTES"); v != "" {
 		if n, err := strconv.ParseInt(v, 10, 64); err == nil && n > 0 {
 			maxBody = n
 		}
 	}
-    r.Use(limitRequestBody(maxBody))
-    r.Use(requestLogger(logger))
-    r.Use(recoverer(logger))
-    if mw := authJWTFromEnv(); mw != nil { r.Use(mw) }
+	r.Use(limitRequestBody(maxBody))
+	r.Use(requestLogger(logger))
+	r.Use(recoverer(logger))
+	if mw := authJWTFromEnv(); mw != nil {
+		r.Use(mw)
+	}
 
 	s := &Server{
 		svc:         journal.New(jrepo, jwriter),
