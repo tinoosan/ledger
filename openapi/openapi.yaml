@@ -3,6 +3,8 @@ info:
   title: Ledger Service API
   version: 0.1.0
   description: Validation + storage service for journal entries and accounts
+security:
+  - bearerAuth: []
 servers:
   - url: http://localhost:8080
     description: Local development
@@ -12,6 +14,7 @@ paths:
       summary: Liveness probe
       operationId: healthz
       tags: [ops]
+      security: []
       responses:
         '200': { description: OK }
   /readyz:
@@ -19,6 +22,7 @@ paths:
       summary: Readiness probe
       operationId: readyz
       tags: [ops]
+      security: []
       responses:
         '200': { description: OK }
 
@@ -27,6 +31,7 @@ paths:
       summary: Curated groups per account type
       operationId: getGroupsDictionary
       tags: [dictionary]
+      security: []
       parameters:
         - in: query
           name: type
@@ -818,3 +823,8 @@ components:
       properties:
         error: { type: string }
         code: { type: string }
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
