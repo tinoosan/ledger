@@ -22,6 +22,10 @@ func (s *Server) postAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	createdAccount, err := s.accountSvc.Create(r.Context(), accountInput)
 	if err != nil {
+		if errors.Is(err, account.ErrPathExistsSoftDeleted) {
+			writeErr(w, http.StatusConflict, err.Error(), "account_exists_soft_deleted")
+			return
+		}
 		if errors.Is(err, account.ErrPathExists) {
 			conflict(w, err.Error())
 			return

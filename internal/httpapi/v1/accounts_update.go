@@ -150,3 +150,46 @@ func (s *Server) deactivateAccount(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// reactivateAccount handles POST /v1/accounts/{id}/reactivate (undo soft delete).
+func (s *Server) reactivateAccount(w http.ResponseWriter, r *http.Request) {
+	idStr := chi.URLParam(r, "id")
+	id, err := uuid.Parse(idStr)
+	if err != nil {
+		toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid account id"})
+		return
+	}
+	userIDStr := r.URL.Query().Get("user_id")
+	if userIDStr == "" {
+		toJSON(w, http.StatusBadRequest, errorResponse{Error: "user_id is required"})
+		return
+	}
+	userID, err := uuid.Parse(userIDStr)
+	if err != nil {
+		toJSON(w, http.StatusBadRequest, errorResponse{Error: "invalid user_id"})
+		return
+	}
+	acc, err := s.accountSvc.Reactivate(r.Context(), userID, id)
+	if err != nil {
+		if errors.Is(err, errs.ErrSystemAccount) {
+			writeErr(w, http.StatusForbidden, "system_account", "system_account")
+			return
+		}
+		if errors.Is(err, errs.ErrForbidden) {
+			forbidden(w, "forbidden")
+			return
+		}
+		if errors.Is(err, errs.ErrInvalid) {
+			badRequest(w, "invalid")
+			return
+		}
+		if errors.Is(err, errs.ErrNotFound) {
+			notFound(w)
+			return
+		}
+		writeErr(w, http.StatusBadRequest, err.Error(), "")
+		return
+	}
+	resp := accountResponse{ID: acc.ID, UserID: acc.UserID, Name: acc.Name, Currency: acc.Currency, Type: acc.Type, Group: acc.Group, Vendor: acc.Vendor, Path: acc.Path(), Metadata: acc.Metadata, System: acc.System, Active: acc.Active}
+	toJSON(w, http.StatusOK, resp)
+}

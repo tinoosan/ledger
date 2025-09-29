@@ -29,6 +29,7 @@ type Service interface {
 	List(ctx context.Context, userID uuid.UUID) ([]ledger.Account, error)
 	Update(ctx context.Context, a ledger.Account) (ledger.Account, error)
 	Deactivate(ctx context.Context, userID, accountID uuid.UUID) error
+	Reactivate(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error)
 	EnsureOpeningBalanceAccount(ctx context.Context, userID uuid.UUID, currency string) (ledger.Account, error)
 	EnsureAccountsBatch(ctx context.Context, userID uuid.UUID, specs []ledger.Account) ([]ledger.Account, []ItemError, error)
 }
@@ -178,7 +179,13 @@ func (s *service) EnsureAccountsBatch(ctx context.Context, userID uuid.UUID, spe
 		seen[desired] = i
 		for _, other := range existing {
 			if other.UserID == userID && strings.EqualFold(normalizedPathString(other), normalizedPathString(a)) && strings.EqualFold(other.Currency, a.Currency) {
-				errsList = append(errsList, ItemError{Index: i, Code: "conflict", Err: ErrPathExists})
+				code := "conflict"
+				errVal := ErrPathExists
+				if !other.Active {
+					code = "account_exists_soft_deleted"
+					errVal = ErrPathExistsSoftDeleted
+				}
+				errsList = append(errsList, ItemError{Index: i, Code: code, Err: errVal})
 				break
 			}
 		}
@@ -260,6 +267,9 @@ func (s *service) Create(ctx context.Context, account ledger.Account) (ledger.Ac
 	desired := normalizedPathString(ledger.Account{Type: account.Type, Group: account.Group, Vendor: account.Vendor, System: account.System})
 	for _, a := range existing {
 		if a.UserID == account.UserID && strings.EqualFold(normalizedPathString(a), desired) && strings.EqualFold(a.Currency, account.Currency) {
+			if !a.Active {
+				return ledger.Account{}, ErrPathExistsSoftDeleted
+			}
 			return ledger.Account{}, ErrPathExists
 		}
 	}
@@ -290,6 +300,9 @@ func normalizedPathString(a ledger.Account) string {
 
 // ErrPathExists indicates an account with the same normalized path already exists for the user.
 var ErrPathExists = errors.New("account path already exists for user")
+
+// ErrPathExistsSoftDeleted indicates a path exists but the account is soft-deleted.
+var ErrPathExistsSoftDeleted = errors.New("account_exists_soft_deleted")
 
 // Update applies allowed changes to name/group/vendor/metadata using a complete domain account.
 func (s *service) Update(ctx context.Context, a ledger.Account) (ledger.Account, error) {
@@ -353,6 +366,32 @@ func (s *service) Deactivate(ctx context.Context, userID, accountID uuid.UUID) e
 		return err
 	}
 	return nil
+}
+
+// Reactivate sets Active=true (undo soft delete). No-op if already active.
+func (s *service) Reactivate(ctx context.Context, userID, accountID uuid.UUID) (ledger.Account, error) {
+	if userID == uuid.Nil || accountID == uuid.Nil {
+		return ledger.Account{}, errs.ErrInvalid
+	}
+	acc, err := s.repo.GetAccount(ctx, userID, accountID)
+	if err != nil {
+		return ledger.Account{}, err
+	}
+	if acc.UserID != userID {
+		return ledger.Account{}, errs.ErrForbidden
+	}
+	if acc.System {
+		return ledger.Account{}, errs.ErrSystemAccount
+	}
+	if acc.Active {
+		return acc, nil
+	}
+	acc.Active = true
+	updated, err := s.writer.UpdateAccount(ctx, acc)
+	if err != nil {
+		return ledger.Account{}, err
+	}
+	return updated, nil
 }
 
 // Merge functionality intentionally omitted per design: perform merges by

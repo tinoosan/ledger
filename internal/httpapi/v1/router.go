@@ -94,6 +94,8 @@ func (s *Server) routes() {
 	s.rt.Get("/accounts/{id}/ledger", s.getAccountLedger)
 	s.rt.Patch("/v1/accounts/{id}", s.updateAccount)
 	s.rt.Delete("/v1/accounts/{id}", s.deactivateAccount)
+	// Reactivate (undo soft delete)
+	s.rt.Post("/v1/accounts/{id}/reactivate", s.reactivateAccount)
 	// Health (unversioned)
 	s.rt.Get("/healthz", s.healthz)
 	s.rt.Get("/readyz", s.readyz)

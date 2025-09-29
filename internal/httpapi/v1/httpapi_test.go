@@ -2,6 +2,7 @@ package v1
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"log/slog"
@@ -1180,5 +1181,67 @@ func TestEntries_List_PaginationAndFilters(t *testing.T) {
 	_ = json.Unmarshal(rec2.Body.Bytes(), &page2)
 	if len(page2.Items) != 1 {
 		t.Fatalf("expected 1 item, got %d", len(page2.Items))
+	}
+}
+
+func TestAccounts_Create_ConflictSoftDeleted_And_Reactivate(t *testing.T) {
+	store, h, userID, cash, _ := setup(t)
+	// Soft delete the existing cash account
+	reqDel := httptest.NewRequest(http.MethodDelete, "/v1/accounts/"+cash.ID.String()+"?user_id="+userID.String(), nil)
+	recDel := httptest.NewRecorder()
+	h.ServeHTTP(recDel, reqDel)
+	if recDel.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", recDel.Code, recDel.Body.String())
+	}
+
+	// Attempt to create another account with same (type, group, vendor, currency)
+	body := map[string]any{
+		"user_id":  userID.String(),
+		"name":     "Cash Again",
+		"currency": cash.Currency,
+		"type":     string(cash.Type),
+		"group":    cash.Group,
+		"vendor":   cash.Vendor,
+	}
+	b, _ := json.Marshal(body)
+	req := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+	if rec.Code != http.StatusConflict {
+		t.Fatalf("expected 409, got %d: %s", rec.Code, rec.Body.String())
+	}
+	var er errorResponse
+	_ = json.Unmarshal(rec.Body.Bytes(), &er)
+	if er.Code != "account_exists_soft_deleted" {
+		t.Fatalf("expected code account_exists_soft_deleted, got %+v", er)
+	}
+
+	// Reactivate the soft-deleted account
+	reqRe := httptest.NewRequest(http.MethodPost, "/v1/accounts/"+cash.ID.String()+"/reactivate?user_id="+userID.String(), nil)
+	recRe := httptest.NewRecorder()
+	h.ServeHTTP(recRe, reqRe)
+	if recRe.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", recRe.Code, recRe.Body.String())
+	}
+	var ar acctResp
+	_ = json.Unmarshal(recRe.Body.Bytes(), &ar)
+	if ar.ID != cash.ID.String() {
+		t.Fatalf("unexpected account reactivated: %+v", ar)
+	}
+
+	// Verify create now conflicts with active path (generic conflict)
+	req2 := httptest.NewRequest(http.MethodPost, "/v1/accounts", bytes.NewReader(b))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req2)
+	if rec2.Code != http.StatusConflict {
+		t.Fatalf("expected 409 on duplicate, got %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	// Ensure store updated Active=true
+	got, _ := store.GetAccount(context.Background(), userID, cash.ID)
+	if !got.Active {
+		t.Fatalf("expected account active after reactivation")
 	}
 }
