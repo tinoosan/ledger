@@ -1,14 +1,20 @@
 package v1
 
 import (
+	"context"
+	"crypto"
 	"crypto/hmac"
+	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"math/big"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -40,6 +46,12 @@ func base64URLDecode(s string) ([]byte, error) {
 	return base64.URLEncoding.DecodeString(s)
 }
 
+type jwtHeader struct {
+	Alg string `json:"alg"`
+	Typ string `json:"typ"`
+	Kid string `json:"kid,omitempty"`
+}
+
 func verifyHS256(token, secret string) (JWTClaims, error) {
 	var empty JWTClaims
 	parts := strings.Split(token, ".")
@@ -60,7 +72,7 @@ func verifyHS256(token, secret string) (JWTClaims, error) {
 	}
 
 	// Expect alg HS256
-	var hdr struct{ Alg, Typ string }
+	var hdr jwtHeader
 	if err := json.Unmarshal(headerB, &hdr); err != nil {
 		return empty, errors.New("bad header json")
 	}
@@ -107,18 +119,155 @@ func audContains(aud any, expected string) bool {
 	return false
 }
 
-// authJWTFromEnv returns a middleware that enforces Authorization: Bearer JWT (HS256)
-// when JWT_HS256_SECRET is set. Optional checks: JWT_ISSUER, JWT_AUDIENCE.
-func authJWTFromEnv() func(http.Handler) http.Handler {
-	secret := strings.TrimSpace(os.Getenv("JWT_HS256_SECRET"))
-	if secret == "" {
+// JWKS (RS256) support -----------------------------------------------------
+
+type jwkRSA struct {
+	Kty string `json:"kty"`
+	Kid string `json:"kid"`
+	N   string `json:"n"`
+	E   string `json:"e"`
+}
+
+type jwksDoc struct {
+	Keys []jwkRSA `json:"keys"`
+}
+
+type jwksCache struct {
+	url   string
+	ttl   time.Duration
+	mu    sync.RWMutex
+	exp   time.Time
+	keys  map[string]*rsa.PublicKey
+	httpc *http.Client
+}
+
+func newJWKSCache(url string, ttl time.Duration) *jwksCache {
+	return &jwksCache{url: url, ttl: ttl, keys: make(map[string]*rsa.PublicKey), httpc: &http.Client{Timeout: 5 * time.Second}}
+}
+
+func (c *jwksCache) get(ctx context.Context, kid string) *rsa.PublicKey {
+	c.mu.RLock()
+	if k, ok := c.keys[kid]; ok && time.Now().Before(c.exp) {
+		c.mu.RUnlock()
+		return k
+	}
+	c.mu.RUnlock()
+	// refresh
+	_ = c.refresh(ctx)
+	c.mu.RLock()
+	defer c.mu.RUnlock()
+	return c.keys[kid]
+}
+
+func (c *jwksCache) refresh(ctx context.Context) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if time.Now().Before(c.exp) {
 		return nil
 	}
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, c.url, nil)
+	resp, err := c.httpc.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	var doc jwksDoc
+	dec := json.NewDecoder(resp.Body)
+	if err := dec.Decode(&doc); err != nil {
+		return err
+	}
+	keys := make(map[string]*rsa.PublicKey)
+	for _, k := range doc.Keys {
+		if !strings.EqualFold(k.Kty, "RSA") || k.N == "" || k.E == "" || k.Kid == "" {
+			continue
+		}
+		nBytes, err := base64URLDecode(k.N)
+		if err != nil {
+			continue
+		}
+		eBytes, err := base64URLDecode(k.E)
+		if err != nil {
+			continue
+		}
+		n := new(big.Int).SetBytes(nBytes)
+		eb := new(big.Int).SetBytes(eBytes)
+		if !eb.IsInt64() {
+			continue
+		}
+		pub := &rsa.PublicKey{N: n, E: int(eb.Int64())}
+		keys[k.Kid] = pub
+	}
+	c.keys = keys
+	c.exp = time.Now().Add(c.ttl)
+	return nil
+}
+
+func verifyRS256(token string, lookup func(kid string) *rsa.PublicKey) (JWTClaims, error) {
+	var empty JWTClaims
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return empty, errors.New("invalid token format")
+	}
+	headerB, err := base64URLDecode(parts[0])
+	if err != nil {
+		return empty, errors.New("bad header b64")
+	}
+	payloadB, err := base64URLDecode(parts[1])
+	if err != nil {
+		return empty, errors.New("bad payload b64")
+	}
+	sigB, err := base64URLDecode(parts[2])
+	if err != nil {
+		return empty, errors.New("bad signature b64")
+	}
+	var hdr jwtHeader
+	if err := json.Unmarshal(headerB, &hdr); err != nil {
+		return empty, errors.New("bad header json")
+	}
+	if !strings.EqualFold(hdr.Alg, "RS256") {
+		return empty, errors.New("unsupported alg")
+	}
+	if hdr.Kid == "" {
+		return empty, errors.New("missing kid")
+	}
+	pub := lookup(hdr.Kid)
+	if pub == nil {
+		return empty, errors.New("unknown kid")
+	}
+	signed := parts[0] + "." + parts[1]
+	sum := sha256.Sum256([]byte(signed))
+	if err := rsa.VerifyPKCS1v15(pub, crypto.SHA256, sum[:], sigB); err != nil {
+		return empty, errors.New("invalid signature")
+	}
+	var claims JWTClaims
+	if err := json.Unmarshal(payloadB, &claims); err != nil {
+		return empty, errors.New("bad claims json")
+	}
+	return claims, nil
+}
+
+// Prefer RS256 via JWKS when configured; fallback to HS256 otherwise.
+func authJWTFromEnv() func(http.Handler) http.Handler {
+	jwksURL := strings.TrimSpace(os.Getenv("JWT_JWKS_URL"))
+	secret := strings.TrimSpace(os.Getenv("JWT_HS256_SECRET"))
 	iss := strings.TrimSpace(os.Getenv("JWT_ISSUER"))
 	aud := strings.TrimSpace(os.Getenv("JWT_AUDIENCE"))
+	var cache *jwksCache
+	if jwksURL != "" {
+		ttl := 300 * time.Second
+		if v := strings.TrimSpace(os.Getenv("JWT_JWKS_TTL")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				ttl = time.Duration(n) * time.Second
+			}
+		}
+		cache = newJWKSCache(jwksURL, ttl)
+	}
+	if jwksURL == "" && secret == "" {
+		return nil
+	}
+
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// allow unauthenticated for health and spec
 			switch r.URL.Path {
 			case "/healthz", "/readyz", "/v1/openapi.yaml":
 				next.ServeHTTP(w, r)
@@ -128,16 +277,28 @@ func authJWTFromEnv() func(http.Handler) http.Handler {
 				next.ServeHTTP(w, r)
 				return
 			}
+
 			tok, ok := parseBearerToken(r)
 			if !ok {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
-			claims, err := verifyHS256(tok, secret)
+
+			var claims JWTClaims
+			var err error
+			if cache != nil {
+				claims, err = verifyRS256(tok, func(kid string) *rsa.PublicKey { return cache.get(r.Context(), kid) })
+				if err != nil && secret != "" {
+					claims, err = verifyHS256(tok, secret)
+				}
+			} else if secret != "" {
+				claims, err = verifyHS256(tok, secret)
+			}
 			if err != nil {
 				w.WriteHeader(http.StatusUnauthorized)
 				return
 			}
+
 			now := time.Now().Unix()
 			if claims.NotBefore != 0 && now < claims.NotBefore {
 				w.WriteHeader(http.StatusUnauthorized)

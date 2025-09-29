@@ -20,7 +20,7 @@ build:
 
 # -------- Docker helpers --------
 # Defaults can be overridden: make image IMAGE=ghcr.io/you/ledger:dev
-IMAGE ?= tinosan/ledger:dev
+IMAGE ?= tinoosan/ledger:dev
 CONTAINER ?= ledger-api
 PORT ?= 8080
 
