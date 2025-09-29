@@ -34,7 +34,7 @@ services:
 
   api:
     build: .
-    image: tinosan/ledger:dev
+    image: tinoosan/ledger:dev
     container_name: ledger-api
     depends_on:
       db:
@@ -49,7 +49,10 @@ services:
       LOG_LEVEL: INFO
       # Prefer RS256 via JWKS for service-to-service auth
       JWT_JWKS_URL: http://keycloak:8080/realms/internal/protocol/openid-connect/certs
-      JWT_ISSUER: http://keycloak:8080/realms/internal
+      # Important: issuer must match the 'iss' in the token returned to Postman
+      # Since Postman calls Keycloak via localhost:8082, the token's iss will be http://localhost:8082/realms/internal
+      # Ledger only compares strings, so it's fine that this URL isn't reachable inside the container
+      JWT_ISSUER: http://localhost:8082/realms/internal
       JWT_AUDIENCE: ledger-api
     ports:
       - "8080:8080"
