@@ -27,11 +27,14 @@ LABEL org.opencontainers.image.title="ledger" \
       org.opencontainers.image.licenses="MIT"
 
 ENV LOG_FORMAT=json \
-    LOG_LEVEL=INFO
+    LOG_LEVEL=INFO \
+    # Optional JWT auth (HS256). Leave empty to disable in the image; set via runtime envs.
+    JWT_HS256_SECRET="" \
+    JWT_ISSUER="" \
+    JWT_AUDIENCE=""
 
 COPY --from=builder /out/ledger /usr/local/bin/ledger
 
 EXPOSE 8080
 USER nonroot:nonroot
 ENTRYPOINT ["/usr/local/bin/ledger"]
-

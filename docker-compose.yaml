@@ -33,6 +33,10 @@ services:
       DEV_SEED: "true"
       LOG_FORMAT: json
       LOG_LEVEL: INFO
+      # Enable JWT auth for local service-to-service calls
+      JWT_HS256_SECRET: dev-secret-change-me
+      JWT_ISSUER: ledger
+      JWT_AUDIENCE: internal
     ports:
       - "8080:8080"
     healthcheck:
