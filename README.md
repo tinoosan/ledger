@@ -293,9 +293,15 @@ Wiring example (later):
 - `LOG_FORMAT`: `json` (default) or `text`
 - `LOG_LEVEL`: `DEBUG | INFO | WARNING | ERROR`
 - `MAX_BODY_BYTES`: maximum request body size in bytes (default 1048576)
-- `JWT_HS256_SECRET`: when set, enables Authorization: Bearer JWT (HS256) auth middleware
-- `JWT_ISSUER`: optional expected `iss` claim
-- `JWT_AUDIENCE`: optional expected `aud` claim (string or array)
+- RS256/JWKS (recommended):
+  - `JWT_JWKS_URL`: JWKS endpoint (e.g., `https://auth/realms/internal/protocol/openid-connect/certs`)
+  - `JWT_JWKS_TTL`: cache TTL in seconds (default 300)
+  - `JWT_ISSUER`: expected `iss` claim (string compare; ensure it matches exactly)
+  - `JWT_AUDIENCE`: expected `aud` claim (string present in array or equals string)
+- HS256 (dev fallback):
+  - `JWT_HS256_SECRET`: shared secret to enable HS256 verification
+  - `JWT_ISSUER`, `JWT_AUDIENCE` as above
+  - If both JWKS and HS256 are set, JWKS is preferred; HS256 is used as fallback only if RS256 verification fails
 
 ## Idempotency (How To Test)
 
@@ -339,9 +345,9 @@ Auth for local dev (Keycloak)
 - Predefined clients:
   - `ledger-api` (audience)
   - `service-a` (confidential; client secret `service-a-secret`)
-- Ledger is configured to verify RS256 tokens via JWKS:
+- Ledger is configured to verify RS256 tokens via JWKS (inside the compose network) while comparing `iss` to the external URL Postman uses:
   - `JWT_JWKS_URL` → `http://keycloak:8080/realms/internal/protocol/openid-connect/certs`
-  - `JWT_ISSUER`   → `http://keycloak:8080/realms/internal`
+  - `JWT_ISSUER`   → `http://localhost:8082/realms/internal` (must match the token's `iss`)
   - `JWT_AUDIENCE` → `ledger-api`
 
 Get a token in Postman
