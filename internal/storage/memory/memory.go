@@ -23,25 +23,25 @@ type entryKey struct {
 // Store is an in-memory implementation of the repository+writer used by the API.
 // It is guarded by an RWMutex for concurrent reads/writes.
 type Store struct {
-	mu       sync.RWMutex
-	users    map[uuid.UUID]struct{}
-	accounts map[uuid.UUID]ledger.Account
-	entries  map[uuid.UUID]*ledger.JournalEntry
-	// Per-user sorted index of entries for efficient ordered scans and paging
-	entryKeysByUser map[uuid.UUID][]entryKey
-	// Idempotency: userID -> key -> entryID
-	entryIdem map[uuid.UUID]map[string]uuid.UUID
+    mu       sync.RWMutex
+    userSet       map[uuid.UUID]struct{}
+    accountsByID  map[uuid.UUID]ledger.Account
+    entriesByID   map[uuid.UUID]*ledger.JournalEntry
+    // Per-user sorted index of entries for efficient ordered scans and paging
+    entryIndexByUser map[uuid.UUID][]entryKey
+    // Idempotency: userID -> key -> entryID
+    idempotencyByUser map[uuid.UUID]map[string]uuid.UUID
 }
 
 // New constructs an empty in-memory store.
 func New() *Store {
-	return &Store{
-		users:           make(map[uuid.UUID]struct{}),
-		accounts:        make(map[uuid.UUID]ledger.Account),
-		entries:         make(map[uuid.UUID]*ledger.JournalEntry),
-		entryKeysByUser: make(map[uuid.UUID][]entryKey),
-		entryIdem:       make(map[uuid.UUID]map[string]uuid.UUID),
-	}
+    return &Store{
+        userSet:           make(map[uuid.UUID]struct{}),
+        accountsByID:      make(map[uuid.UUID]ledger.Account),
+        entriesByID:       make(map[uuid.UUID]*ledger.JournalEntry),
+        entryIndexByUser:  make(map[uuid.UUID][]entryKey),
+        idempotencyByUser: make(map[uuid.UUID]map[string]uuid.UUID),
+    }
 }
 
 // Ready implements a no-op readiness check for memory store.
@@ -61,15 +61,15 @@ func cloneEntry(e ledger.JournalEntry) ledger.JournalEntry {
 }
 
 // Seed helpers for local dev/tests.
-func (s *Store) SeedUser(u ledger.User)       { s.mu.Lock(); s.users[u.ID] = struct{}{}; s.mu.Unlock() }
-func (s *Store) SeedAccount(a ledger.Account) { s.mu.Lock(); s.accounts[a.ID] = a; s.mu.Unlock() }
+func (s *Store) SeedUser(u ledger.User)       { s.mu.Lock(); s.userSet[u.ID] = struct{}{}; s.mu.Unlock() }
+func (s *Store) SeedAccount(a ledger.Account) { s.mu.Lock(); s.accountsByID[a.ID] = a; s.mu.Unlock() }
 func (s *Store) Reset() {
 	s.mu.Lock()
-	s.users = map[uuid.UUID]struct{}{}
-	s.accounts = map[uuid.UUID]ledger.Account{}
-	s.entries = map[uuid.UUID]*ledger.JournalEntry{}
-	s.entryKeysByUser = map[uuid.UUID][]entryKey{}
-	s.entryIdem = map[uuid.UUID]map[string]uuid.UUID{}
+    s.userSet = map[uuid.UUID]struct{}{}
+    s.accountsByID = map[uuid.UUID]ledger.Account{}
+    s.entriesByID = map[uuid.UUID]*ledger.JournalEntry{}
+    s.entryIndexByUser = map[uuid.UUID][]entryKey{}
+    s.idempotencyByUser = map[uuid.UUID]map[string]uuid.UUID{}
 	s.mu.Unlock()
 }
 
@@ -84,7 +84,7 @@ func (s *Store) AccountsByIDs(_ context.Context, userID uuid.UUID, ids []uuid.UU
 			continue
 		}
 		seen[id] = struct{}{}
-		if acc, ok := s.accounts[id]; ok && acc.UserID == userID {
+        if acc, ok := s.accountsByID[id]; ok && acc.UserID == userID {
 			out[id] = acc
 		}
 	}
@@ -103,7 +103,7 @@ func (s *Store) CreateJournalEntry(_ context.Context, entry ledger.JournalEntry)
 	// store shallow copy
 	e := entry
 	e.Metadata = entry.Metadata.Clone()
-	s.entries[e.ID] = &e
+    s.entriesByID[e.ID] = &e
 	s.insertEntryIndexLocked(e.UserID, entryKey{Date: e.Date, ID: e.ID})
 	return cloneEntry(e), nil
 }
@@ -112,12 +112,12 @@ func (s *Store) CreateJournalEntry(_ context.Context, entry ledger.JournalEntry)
 func (s *Store) UpdateJournalEntry(_ context.Context, entry ledger.JournalEntry) (ledger.JournalEntry, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.entries[entry.ID]; !ok {
+    if _, ok := s.entriesByID[entry.ID]; !ok {
 		return ledger.JournalEntry{}, errs.ErrNotFound
 	}
 	e := entry
 	e.Metadata = entry.Metadata.Clone()
-	s.entries[entry.ID] = &e
+    s.entriesByID[entry.ID] = &e
 	return cloneEntry(e), nil
 }
 
@@ -125,10 +125,10 @@ func (s *Store) UpdateJournalEntry(_ context.Context, entry ledger.JournalEntry)
 func (s *Store) EntriesByUserID(_ context.Context, userID uuid.UUID) ([]ledger.JournalEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	keys := s.entryKeysByUser[userID]
+    keys := s.entryIndexByUser[userID]
 	out := make([]ledger.JournalEntry, 0, len(keys))
 	for _, k := range keys {
-		if e, ok := s.entries[k.ID]; ok && e.UserID == userID {
+        if e, ok := s.entriesByID[k.ID]; ok && e.UserID == userID {
 			out = append(out, cloneEntry(*e))
 		}
 	}
@@ -145,7 +145,7 @@ func (s *Store) ListEntries(ctx context.Context, userID uuid.UUID) ([]ledger.Jou
 func (s *Store) GetEntry(_ context.Context, userID, entryID uuid.UUID) (ledger.JournalEntry, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	e, ok := s.entries[entryID]
+    e, ok := s.entriesByID[entryID]
 	if !ok || e.UserID != userID {
 		return ledger.JournalEntry{}, errs.ErrNotFound
 	}
@@ -160,7 +160,7 @@ func (s *Store) AccountsByUserID(_ context.Context, userID uuid.UUID) ([]ledger.
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]ledger.Account, 0)
-	for _, a := range s.accounts {
+    for _, a := range s.accountsByID {
 		if a.UserID == userID {
 			out = append(out, cloneAccount(a))
 		}
@@ -178,7 +178,7 @@ func (s *Store) CreateAccount(_ context.Context, a ledger.Account) (ledger.Accou
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ca := cloneAccount(a)
-	s.accounts[a.ID] = ca
+    s.accountsByID[a.ID] = ca
 	return cloneAccount(ca), nil
 }
 
@@ -187,7 +187,7 @@ func (s *Store) CreateAccount(_ context.Context, a ledger.Account) (ledger.Accou
 func (s *Store) GetAccount(_ context.Context, userID, accountID uuid.UUID) (ledger.Account, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	a, ok := s.accounts[accountID]
+    a, ok := s.accountsByID[accountID]
 	if !ok || a.UserID != userID {
 		return ledger.Account{}, errs.ErrNotFound
 	}
@@ -199,7 +199,7 @@ func (s *Store) UpdateAccount(_ context.Context, a ledger.Account) (ledger.Accou
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	ca := cloneAccount(a)
-	s.accounts[a.ID] = ca
+    s.accountsByID[a.ID] = ca
 	return cloneAccount(ca), nil
 }
 
@@ -207,9 +207,9 @@ func (s *Store) UpdateAccount(_ context.Context, a ledger.Account) (ledger.Accou
 func (s *Store) ResolveEntryByIdempotencyKey(_ context.Context, userID uuid.UUID, key string) (ledger.JournalEntry, bool, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	if m, ok := s.entryIdem[userID]; ok {
+    if m, ok := s.idempotencyByUser[userID]; ok {
 		if eid, ok2 := m[key]; ok2 {
-			if e, ok3 := s.entries[eid]; ok3 {
+            if e, ok3 := s.entriesByID[eid]; ok3 {
 				return *e, true, nil
 			}
 		}
@@ -221,11 +221,8 @@ func (s *Store) ResolveEntryByIdempotencyKey(_ context.Context, userID uuid.UUID
 func (s *Store) SaveEntryIdempotencyKey(_ context.Context, userID uuid.UUID, key string, entryID uuid.UUID) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	m, ok := s.entryIdem[userID]
-	if !ok {
-		m = make(map[string]uuid.UUID)
-		s.entryIdem[userID] = m
-	}
+    m, ok := s.idempotencyByUser[userID]
+    if !ok { m = make(map[string]uuid.UUID); s.idempotencyByUser[userID] = m }
 	// Only set if absent to preserve idempotency
 	if _, exists := m[key]; !exists {
 		m[key] = entryID
@@ -268,20 +265,20 @@ func (tx *batchTx) Commit(_ context.Context) error {
 	tx.s.mu.Lock()
 	defer tx.s.mu.Unlock()
 	// Check account conflicts and apply
-	for _, a := range tx.accounts {
-		for _, existing := range tx.s.accounts {
+    for _, a := range tx.accounts {
+        for _, existing := range tx.s.accountsByID {
 			if existing.UserID == a.UserID && existing.Currency == a.Currency && strings.EqualFold(existing.Path(), a.Path()) {
 				return errs.ErrConflict
 			}
 		}
 	}
-	for _, a := range tx.accounts {
-		ca := cloneAccount(a)
-		tx.s.accounts[a.ID] = ca
-	}
-	for _, e := range tx.entries {
-		ce := cloneEntry(e)
-		tx.s.entries[e.ID] = &ce
+    for _, a := range tx.accounts {
+        ca := cloneAccount(a)
+        tx.s.accountsByID[a.ID] = ca
+    }
+    for _, e := range tx.entries {
+        ce := cloneEntry(e)
+        tx.s.entriesByID[e.ID] = &ce
 		tx.s.insertEntryIndexLocked(e.UserID, entryKey{Date: e.Date, ID: e.ID})
 	}
 	return nil
@@ -292,7 +289,7 @@ func (tx *batchTx) Rollback(_ context.Context) error { return nil }
 // insertEntryIndexLocked inserts k into the per-user sorted index, keeping order asc by (Date, ID).
 // Caller must hold s.mu (write lock).
 func (s *Store) insertEntryIndexLocked(userID uuid.UUID, k entryKey) {
-	keys := s.entryKeysByUser[userID]
+    keys := s.entryIndexByUser[userID]
 	// binary search for first position > k (stable insert after equal)
 	i := sort.Search(len(keys), func(i int) bool {
 		if keys[i].Date.After(k.Date) {
@@ -305,13 +302,13 @@ func (s *Store) insertEntryIndexLocked(userID uuid.UUID, k entryKey) {
 	})
 	// insert at i
 	if i == len(keys) {
-		s.entryKeysByUser[userID] = append(keys, k)
-		return
-	}
+        s.entryIndexByUser[userID] = append(keys, k)
+        return
+    }
 	keys = append(keys, entryKey{})
 	copy(keys[i+1:], keys[i:])
 	keys[i] = k
-	s.entryKeysByUser[userID] = keys
+    s.entryIndexByUser[userID] = keys
 }
 
 // rangeByTime returns a copy of keys within [from,to] inclusive for a user.
