@@ -268,11 +268,11 @@ func authJWTFromEnv() func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			switch r.URL.Path {
-			case "/healthz", "/readyz", "/v1/openapi.yaml":
-				next.ServeHTTP(w, r)
-				return
-			}
+				switch r.URL.Path {
+				case "/healthz", "/readyz", "/metrics", "/v1/openapi.yaml":
+					next.ServeHTTP(w, r)
+					return
+				}
 			if strings.HasPrefix(r.URL.Path, "/v1/dictionary/") {
 				next.ServeHTTP(w, r)
 				return

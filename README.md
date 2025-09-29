@@ -25,7 +25,8 @@ On start, the in-memory store seeds 1 user and 3 accounts (including the system 
 
 - Health/ops
   - `GET /healthz` — liveness
-  - `GET /readyz` — readiness
+- `GET /readyz` — readiness
+  - `GET /metrics` — Prometheus metrics (counters and histograms)
 - Entries
   - `GET /v1/entries?user_id=...` — list (filters: currency, memo, category, is_reversed)
   - `POST /v1/entries` — create (validates invariants; returns created entry)

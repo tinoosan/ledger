@@ -44,6 +44,7 @@ func New(accReader AccountReader, entryReader EntryReader, idem IdempotencyStore
 	r.Use(limitRequestBody(maxBody))
 	r.Use(requestLogger(logger))
 	r.Use(recoverer(logger))
+	r.Use(metricsMiddleware)
 	if mw := authJWTFromEnv(); mw != nil {
 		r.Use(mw)
 	}
@@ -96,6 +97,8 @@ func (s *Server) routes() {
 	// Health (unversioned)
 	s.rt.Get("/healthz", s.healthz)
 	s.rt.Get("/readyz", s.readyz)
+	// Metrics (Prometheus)
+	s.rt.Get("/metrics", func(w http.ResponseWriter, r *http.Request) { metricsHandler().ServeHTTP(w, r) })
 	// Dictionary
 	s.rt.Get("/v1/dictionary/groups", s.getGroupsDictionary)
 	// OpenAPI spec (dev convenience)
