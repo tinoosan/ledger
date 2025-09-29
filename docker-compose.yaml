@@ -1,6 +1,18 @@
 name: ledger
 
 services:
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0.4
+    container_name: ledger-keycloak
+    command: ["start-dev", "--import-realm"]
+    environment:
+      KEYCLOAK_ADMIN: admin
+      KEYCLOAK_ADMIN_PASSWORD: admin
+    ports:
+      - "8082:8080"
+    volumes:
+      - ./dev/keycloak/realm-export:/opt/keycloak/data/import:ro
+
   db:
     image: postgres:16
     container_name: ledger-pg
@@ -27,16 +39,18 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      keycloak:
+        condition: service_started
     environment:
       # Internal DNS name 'db' from this compose network
       DATABASE_URL: postgresql://postgres:postgres@db:5432/ledger?sslmode=disable
       DEV_SEED: "true"
       LOG_FORMAT: json
       LOG_LEVEL: INFO
-      # Enable JWT auth for local service-to-service calls
-      JWT_HS256_SECRET: dev-secret-change-me
-      JWT_ISSUER: ledger
-      JWT_AUDIENCE: internal
+      # Prefer RS256 via JWKS for service-to-service auth
+      JWT_JWKS_URL: http://keycloak:8080/realms/internal/protocol/openid-connect/certs
+      JWT_ISSUER: http://keycloak:8080/realms/internal
+      JWT_AUDIENCE: ledger-api
     ports:
       - "8080:8080"
     healthcheck:

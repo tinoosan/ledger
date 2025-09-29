@@ -334,6 +334,26 @@ curl -sS -X POST http://localhost:8080/v1/accounts/batch \
 
 The DB auto-initializes using `db/migrations/0001_init.sql` on first run.
 
+Auth for local dev (Keycloak)
+- Compose includes a Keycloak container at http://localhost:8082 with a preloaded realm `internal`.
+- Predefined clients:
+  - `ledger-api` (audience)
+  - `service-a` (confidential; client secret `service-a-secret`)
+- Ledger is configured to verify RS256 tokens via JWKS:
+  - `JWT_JWKS_URL` → `http://keycloak:8080/realms/internal/protocol/openid-connect/certs`
+  - `JWT_ISSUER`   → `http://keycloak:8080/realms/internal`
+  - `JWT_AUDIENCE` → `ledger-api`
+
+Get a token in Postman
+- Request: `POST http://localhost:8082/realms/internal/protocol/openid-connect/token`
+- Body (x-www-form-urlencoded):
+  - `grant_type=client_credentials`
+  - `client_id=service-a`
+  - `client_secret=service-a-secret`
+- Response contains `access_token` (RS256 JWT). Use it as:
+  - Header: `Authorization: Bearer <access_token>`
+  - Example: `GET http://localhost:8080/v1/entries?user_id=<uuid>`
+
 Release planning and pre-v0.1.0 tasks are tracked as GitHub issues.
 
 ## Authentication (Service-to-Service)
