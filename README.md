@@ -343,6 +343,7 @@ curl -sS -X POST http://localhost:8080/v1/accounts/batch \
 
 ## Local Containers (Compose)
 
+- Copy `.env.example` to `.env` and adjust values as needed.
 - Start: `make compose-up`
 - Logs: `make compose-logs` (shows the dev seed banner with IDs)
 - Stop: `make compose-down`
