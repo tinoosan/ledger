@@ -50,7 +50,7 @@ LABEL org.opencontainers.image.title="ledger (dev)" \
 
 # Add a non-root user and install useful tools (no secrets baked in)
 RUN adduser -D -u 65532 app \
-    && apk add --no-cache ca-certificates tzdata bash curl wget bind-tools iputils
+    && apk add --no-cache ca-certificates tzdata bash curl wget bind-tools iputils jq
 
 ENV LOG_FORMAT=json \
     LOG_LEVEL=INFO \
