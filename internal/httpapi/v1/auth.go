@@ -249,7 +249,7 @@ func verifyRS256(token string, lookup func(kid string) *rsa.PublicKey) (JWTClaim
 	return claims, nil
 }
 
-// Prefer RS256 via JWKS when configured; fallback to HS256 otherwise.
+// Prefer RS256 via JWKS when configured. HS256 is DEPRECATED and no longer used as a fallback.
 func authJWTFromEnv() func(http.Handler) http.Handler {
 	// Note: logger obtained via slog.Default(); router wires slog.SetDefault.
 	// We avoid logging any token or secret material; only reasons and safe claims.
@@ -273,8 +273,9 @@ func authJWTFromEnv() func(http.Handler) http.Handler {
 	if jwksURL == "" && secret == "" {
 		return nil
 	}
-	if jwksURL == "" && secret != "" {
-		logger.Debug("auth configured: HS256 via shared secret")
+	if secret != "" {
+		// Emit a deprecation warning. HS256 support remains only when JWKS is not configured.
+		logger.Warn("DEPRECATED: JWT_HS256_SECRET detected; HS256 verification support will be removed in a future release. Configure RS256 via JWT_JWKS_URL instead.")
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -301,12 +302,10 @@ func authJWTFromEnv() func(http.Handler) http.Handler {
 			var claims JWTClaims
 			var err error
 			if cache != nil {
+				// RS256 via JWKS only. No HS256 fallback when JWKS is configured.
 				claims, err = verifyRS256(tok, func(kid string) *rsa.PublicKey { return cache.get(r.Context(), kid) })
-				if err != nil && secret != "" {
-					logger.Debug("RS256 verify failed; attempting HS256 fallback", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "err", err.Error())
-					claims, err = verifyHS256(tok, secret)
-				}
 			} else if secret != "" {
+				// HS256 path remains for now (deprecated).
 				claims, err = verifyHS256(tok, secret)
 			}
 			if err != nil {
