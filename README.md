@@ -308,10 +308,7 @@ Wiring example (later):
   - `JWT_JWKS_TTL`: cache TTL in seconds (default 300)
   - `JWT_ISSUER`: expected `iss` claim (string compare; ensure it matches exactly)
   - `JWT_AUDIENCE`: expected `aud` claim (string present in array or equals string)
-- HS256 (deprecated):
-  - `JWT_HS256_SECRET` (DEPRECATED): legacy HS256 verification for development-only scenarios. This will be removed in a future release.
-  - `JWT_ISSUER`, `JWT_AUDIENCE` as above
-  - When `JWT_JWKS_URL` is configured, HS256 is not used as a fallback anymore.
+HS256 support has been removed. Only RS256 via JWKS is supported.
 
 ## Idempotency (How To Test)
 
@@ -375,18 +372,12 @@ Release planning and pre-v0.1.0 tasks are tracked as GitHub issues.
 
 ## Authentication (Service-to-Service)
 
-- When `JWT_HS256_SECRET` (DEPRECATED) is set, all endpoints require `Authorization: Bearer <jwt>` except:
+When JWKS is configured, all endpoints require `Authorization: Bearer <jwt>` except:
   - `GET /healthz`, `GET /readyz`, `GET /v1/openapi.yaml`, and `GET /v1/dictionary/*`
-- Token must be HS256 signed; optional claims validated if configured: `iss` (JWT_ISSUER) and `aud` (JWT_AUDIENCE). `exp`/`nbf` respected when present.
-- In dev, prefer RS256 via JWKS. Avoid `JWT_HS256_SECRET` as it is deprecated.
+- Token must be RS256 signed; optional claims validated if configured: `iss` (JWT_ISSUER) and `aud` (JWT_AUDIENCE). `exp`/`nbf` respected when present.
+- In dev, prefer RS256 via JWKS. If JWKS is unset, auth is disabled for local iteration.
 
-Example (generate a token in Node.js):
-
-```
-const jwt = require('jsonwebtoken');
-const token = jwt.sign({ iss: 'ledger', aud: 'internal', sub: 'service-A' }, process.env.JWT_HS256_SECRET, { algorithm: 'HS256', expiresIn: '1h' });
-console.log(token);
-```
+Example: obtain an RS256 token from your IdP (e.g., Keycloak) and use it as `Authorization: Bearer <token>`.
 
 ## License
 
