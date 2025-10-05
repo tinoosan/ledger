@@ -33,8 +33,7 @@ services:
       retries: 15
 
   api:
-    build: .
-    image: tinoosan/ledger:dev
+    image: ghcr.io/tinoosan/ledger:dev
     container_name: ledger-api
     depends_on:
       db:

@@ -1,24 +1,24 @@
 package v1
 
 import (
-    "context"
-    "crypto"
-    "crypto/hmac"
-    "crypto/rsa"
-    "crypto/sha256"
-    "encoding/base64"
-    "encoding/json"
-    "errors"
-    "math/big"
-    "net/http"
-    "os"
-    "strconv"
-    "strings"
-    "sync"
-    "time"
+	"context"
+	"crypto"
+	"crypto/hmac"
+	"crypto/rsa"
+	"crypto/sha256"
+	"encoding/base64"
+	"encoding/json"
+	"errors"
+	"math/big"
+	"net/http"
+	"os"
+	"strconv"
+	"strings"
+	"sync"
+	"time"
 
-    chimw "github.com/go-chi/chi/v5/middleware"
-    "log/slog"
+	chimw "github.com/go-chi/chi/v5/middleware"
+	"log/slog"
 )
 
 type JWTClaims struct {
@@ -251,94 +251,94 @@ func verifyRS256(token string, lookup func(kid string) *rsa.PublicKey) (JWTClaim
 
 // Prefer RS256 via JWKS when configured; fallback to HS256 otherwise.
 func authJWTFromEnv() func(http.Handler) http.Handler {
-    // Note: logger obtained via slog.Default(); router wires slog.SetDefault.
-    // We avoid logging any token or secret material; only reasons and safe claims.
-    // If LOG_LEVEL=DEBUG, these messages help diagnose auth failures.
-    logger := slog.Default()
-    jwksURL := strings.TrimSpace(os.Getenv("JWT_JWKS_URL"))
-    secret := strings.TrimSpace(os.Getenv("JWT_HS256_SECRET"))
-    iss := strings.TrimSpace(os.Getenv("JWT_ISSUER"))
-    aud := strings.TrimSpace(os.Getenv("JWT_AUDIENCE"))
-    var cache *jwksCache
-    if jwksURL != "" {
-        ttl := 300 * time.Second
-        if v := strings.TrimSpace(os.Getenv("JWT_JWKS_TTL")); v != "" {
-            if n, err := strconv.Atoi(v); err == nil && n > 0 {
-                ttl = time.Duration(n) * time.Second
-            }
-        }
-        cache = newJWKSCache(jwksURL, ttl)
-        logger.Debug("auth configured: RS256 via JWKS", "jwks_url", jwksURL, "ttl_seconds", int64(cache.ttl/time.Second))
-    }
-    if jwksURL == "" && secret == "" {
-        return nil
-    }
-    if jwksURL == "" && secret != "" {
-        logger.Debug("auth configured: HS256 via shared secret")
-    }
+	// Note: logger obtained via slog.Default(); router wires slog.SetDefault.
+	// We avoid logging any token or secret material; only reasons and safe claims.
+	// If LOG_LEVEL=DEBUG, these messages help diagnose auth failures.
+	logger := slog.Default()
+	jwksURL := strings.TrimSpace(os.Getenv("JWT_JWKS_URL"))
+	secret := strings.TrimSpace(os.Getenv("JWT_HS256_SECRET"))
+	iss := strings.TrimSpace(os.Getenv("JWT_ISSUER"))
+	aud := strings.TrimSpace(os.Getenv("JWT_AUDIENCE"))
+	var cache *jwksCache
+	if jwksURL != "" {
+		ttl := 300 * time.Second
+		if v := strings.TrimSpace(os.Getenv("JWT_JWKS_TTL")); v != "" {
+			if n, err := strconv.Atoi(v); err == nil && n > 0 {
+				ttl = time.Duration(n) * time.Second
+			}
+		}
+		cache = newJWKSCache(jwksURL, ttl)
+		logger.Debug("auth configured: RS256 via JWKS", "jwks_url", jwksURL, "ttl_seconds", int64(cache.ttl/time.Second))
+	}
+	if jwksURL == "" && secret == "" {
+		return nil
+	}
+	if jwksURL == "" && secret != "" {
+		logger.Debug("auth configured: HS256 via shared secret")
+	}
 
-    return func(next http.Handler) http.Handler {
-        return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-            // Attach request id if present for correlation
-            reqID := chimw.GetReqID(r.Context())
-            switch r.URL.Path {
-            case "/healthz", "/readyz", "/metrics", "/v1/openapi.yaml":
-                next.ServeHTTP(w, r)
-                return
-            }
-            if strings.HasPrefix(r.URL.Path, "/v1/dictionary/") {
-                next.ServeHTTP(w, r)
-                return
-            }
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Attach request id if present for correlation
+			reqID := chimw.GetReqID(r.Context())
+			switch r.URL.Path {
+			case "/healthz", "/readyz", "/metrics", "/v1/openapi.yaml":
+				next.ServeHTTP(w, r)
+				return
+			}
+			if strings.HasPrefix(r.URL.Path, "/v1/dictionary/") {
+				next.ServeHTTP(w, r)
+				return
+			}
 
-            tok, ok := parseBearerToken(r)
-            if !ok {
-                logger.Debug("auth failed: missing or malformed Authorization header", "req_id", reqID, "path", r.URL.Path, "method", r.Method)
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
+			tok, ok := parseBearerToken(r)
+			if !ok {
+				logger.Debug("auth failed: missing or malformed Authorization header", "req_id", reqID, "path", r.URL.Path, "method", r.Method)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 
-            var claims JWTClaims
-            var err error
-            if cache != nil {
-                claims, err = verifyRS256(tok, func(kid string) *rsa.PublicKey { return cache.get(r.Context(), kid) })
-                if err != nil && secret != "" {
-                    logger.Debug("RS256 verify failed; attempting HS256 fallback", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "err", err.Error())
-                    claims, err = verifyHS256(tok, secret)
-                }
-            } else if secret != "" {
-                claims, err = verifyHS256(tok, secret)
-            }
-            if err != nil {
-                logger.Debug("auth failed: signature/structure verification", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "err", err.Error())
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
+			var claims JWTClaims
+			var err error
+			if cache != nil {
+				claims, err = verifyRS256(tok, func(kid string) *rsa.PublicKey { return cache.get(r.Context(), kid) })
+				if err != nil && secret != "" {
+					logger.Debug("RS256 verify failed; attempting HS256 fallback", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "err", err.Error())
+					claims, err = verifyHS256(tok, secret)
+				}
+			} else if secret != "" {
+				claims, err = verifyHS256(tok, secret)
+			}
+			if err != nil {
+				logger.Debug("auth failed: signature/structure verification", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "err", err.Error())
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
 
-            now := time.Now().Unix()
-            if claims.NotBefore != 0 && now < claims.NotBefore {
-                logger.Debug("auth failed: token not yet valid (nbf)", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "nbf", claims.NotBefore, "now", now)
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
-            if claims.ExpiresAt != 0 && now >= claims.ExpiresAt {
-                logger.Debug("auth failed: token expired (exp)", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "exp", claims.ExpiresAt, "now", now)
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
-            if iss != "" && !strings.EqualFold(claims.Issuer, iss) {
-                logger.Debug("auth failed: issuer mismatch", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "got_iss", claims.Issuer, "expected_iss", iss)
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
-            if aud != "" && !audContains(claims.Audience, aud) {
-                logger.Debug("auth failed: audience mismatch", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "expected_aud", aud)
-                w.WriteHeader(http.StatusUnauthorized)
-                return
-            }
-            // Successful auth at debug for traceability
-            logger.Debug("auth ok", "req_id", reqID, "path", r.URL.Path, "method", r.Method)
-            next.ServeHTTP(w, r)
-        })
-    }
+			now := time.Now().Unix()
+			if claims.NotBefore != 0 && now < claims.NotBefore {
+				logger.Debug("auth failed: token not yet valid (nbf)", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "nbf", claims.NotBefore, "now", now)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if claims.ExpiresAt != 0 && now >= claims.ExpiresAt {
+				logger.Debug("auth failed: token expired (exp)", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "exp", claims.ExpiresAt, "now", now)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if iss != "" && !strings.EqualFold(claims.Issuer, iss) {
+				logger.Debug("auth failed: issuer mismatch", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "got_iss", claims.Issuer, "expected_iss", iss)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			if aud != "" && !audContains(claims.Audience, aud) {
+				logger.Debug("auth failed: audience mismatch", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "expected_aud", aud)
+				w.WriteHeader(http.StatusUnauthorized)
+				return
+			}
+			// Successful auth at debug for traceability
+			logger.Debug("auth ok", "req_id", reqID, "path", r.URL.Path, "method", r.Method)
+			next.ServeHTTP(w, r)
+		})
+	}
 }
