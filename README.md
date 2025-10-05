@@ -12,6 +12,7 @@ A small ledger service focused on validation and storage of journal entries and 
 - Logs:
   - `LOG_FORMAT` = `json` (default) | `text`
   - `LOG_LEVEL`  = `DEBUG` | `INFO` | `WARNING` | `ERROR`
+  - Note: at `DEBUG`, the auth middleware logs concise reasons for 401s (no secrets or tokens are logged).
 
 On start, the in-memory store seeds 1 user and 3 accounts (including the system OpeningBalances); their IDs are logged for quick testing.
 
