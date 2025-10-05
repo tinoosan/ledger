@@ -28,8 +28,6 @@ LABEL org.opencontainers.image.title="ledger" \
 
 ENV LOG_FORMAT=json \
     LOG_LEVEL=INFO \
-    # Optional JWT auth (HS256). Leave empty to disable in the image; set via runtime envs.
-    JWT_HS256_SECRET="" \
     JWT_ISSUER="" \
     JWT_AUDIENCE=""
 
@@ -54,7 +52,6 @@ RUN adduser -D -u 65532 app \
 
 ENV LOG_FORMAT=json \
     LOG_LEVEL=INFO \
-    JWT_HS256_SECRET="" \
     JWT_ISSUER="" \
     JWT_AUDIENCE=""
 
