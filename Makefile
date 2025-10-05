@@ -26,7 +26,7 @@ PORT ?= 8080
 
 image:
 	@command -v docker >/dev/null 2>&1 || { echo "docker not installed"; exit 1; }
-	docker build -t $(IMAGE) .
+	docker pull ghcr.io/tinoosan/ledger:dev
 
 run:
 	@command -v docker >/dev/null 2>&1 || { echo "docker not installed"; exit 1; }
