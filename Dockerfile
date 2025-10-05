@@ -19,7 +19,7 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 
 # Stage 2: minimal runtime image (nonroot)
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/static:nonroot AS release
 
 LABEL org.opencontainers.image.title="ledger" \
       org.opencontainers.image.description="Ledger service API" \
@@ -37,4 +37,29 @@ COPY --from=builder /out/ledger /usr/local/bin/ledger
 
 EXPOSE 8080
 USER nonroot:nonroot
+ENTRYPOINT ["/usr/local/bin/ledger"]
+
+# Stage 3: dev/runtime image with shell and tools for troubleshooting
+# Build with: docker build --target dev -t ledger:dev .
+FROM alpine:3.20 AS dev
+
+LABEL org.opencontainers.image.title="ledger (dev)" \
+      org.opencontainers.image.description="Ledger service API - dev image with shell and troubleshooting tools" \
+      org.opencontainers.image.source="https://github.com/tinoosan/ledger" \
+      org.opencontainers.image.licenses="MIT"
+
+# Add a non-root user and install useful tools (no secrets baked in)
+RUN adduser -D -u 65532 app \
+    && apk add --no-cache ca-certificates tzdata bash curl wget bind-tools iputils
+
+ENV LOG_FORMAT=json \
+    LOG_LEVEL=INFO \
+    JWT_HS256_SECRET="" \
+    JWT_ISSUER="" \
+    JWT_AUDIENCE=""
+
+COPY --from=builder /out/ledger /usr/local/bin/ledger
+
+EXPOSE 8080
+USER app
 ENTRYPOINT ["/usr/local/bin/ledger"]
