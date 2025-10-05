@@ -3,7 +3,6 @@ package v1
 import (
 	"context"
 	"crypto"
-	"crypto/hmac"
 	"crypto/rsa"
 	"crypto/sha256"
 	"encoding/base64"
@@ -53,50 +52,6 @@ type jwtHeader struct {
 	Alg string `json:"alg"`
 	Typ string `json:"typ"`
 	Kid string `json:"kid,omitempty"`
-}
-
-func verifyHS256(token, secret string) (JWTClaims, error) {
-	var empty JWTClaims
-	parts := strings.Split(token, ".")
-	if len(parts) != 3 {
-		return empty, errors.New("invalid token format")
-	}
-	headerB, err := base64URLDecode(parts[0])
-	if err != nil {
-		return empty, errors.New("bad header b64")
-	}
-	payloadB, err := base64URLDecode(parts[1])
-	if err != nil {
-		return empty, errors.New("bad payload b64")
-	}
-	sigB, err := base64URLDecode(parts[2])
-	if err != nil {
-		return empty, errors.New("bad signature b64")
-	}
-
-	// Expect alg HS256
-	var hdr jwtHeader
-	if err := json.Unmarshal(headerB, &hdr); err != nil {
-		return empty, errors.New("bad header json")
-	}
-	if !strings.EqualFold(hdr.Alg, "HS256") {
-		return empty, errors.New("unsupported alg")
-	}
-
-	mac := hmac.New(sha256.New, []byte(secret))
-	mac.Write([]byte(parts[0]))
-	mac.Write([]byte{"."[0]})
-	mac.Write([]byte(parts[1]))
-	sum := mac.Sum(nil)
-	if !hmac.Equal(sigB, sum) {
-		return empty, errors.New("invalid signature")
-	}
-
-	var claims JWTClaims
-	if err := json.Unmarshal(payloadB, &claims); err != nil {
-		return empty, errors.New("bad claims json")
-	}
-	return claims, nil
 }
 
 func audContains(aud any, expected string) bool {
@@ -249,14 +204,13 @@ func verifyRS256(token string, lookup func(kid string) *rsa.PublicKey) (JWTClaim
 	return claims, nil
 }
 
-// Prefer RS256 via JWKS when configured. HS256 is DEPRECATED and no longer used as a fallback.
+// Prefer RS256 via JWKS when configured. HS256 support removed.
 func authJWTFromEnv() func(http.Handler) http.Handler {
 	// Note: logger obtained via slog.Default(); router wires slog.SetDefault.
 	// We avoid logging any token or secret material; only reasons and safe claims.
 	// If LOG_LEVEL=DEBUG, these messages help diagnose auth failures.
 	logger := slog.Default()
 	jwksURL := strings.TrimSpace(os.Getenv("JWT_JWKS_URL"))
-	secret := strings.TrimSpace(os.Getenv("JWT_HS256_SECRET"))
 	iss := strings.TrimSpace(os.Getenv("JWT_ISSUER"))
 	aud := strings.TrimSpace(os.Getenv("JWT_AUDIENCE"))
 	var cache *jwksCache
@@ -270,12 +224,8 @@ func authJWTFromEnv() func(http.Handler) http.Handler {
 		cache = newJWKSCache(jwksURL, ttl)
 		logger.Debug("auth configured: RS256 via JWKS", "jwks_url", jwksURL, "ttl_seconds", int64(cache.ttl/time.Second))
 	}
-	if jwksURL == "" && secret == "" {
+	if jwksURL == "" {
 		return nil
-	}
-	if secret != "" {
-		// Emit a deprecation warning. HS256 support remains only when JWKS is not configured.
-		logger.Warn("DEPRECATED: JWT_HS256_SECRET detected; HS256 verification support will be removed in a future release. Configure RS256 via JWT_JWKS_URL instead.")
 	}
 
 	return func(next http.Handler) http.Handler {
@@ -302,11 +252,7 @@ func authJWTFromEnv() func(http.Handler) http.Handler {
 			var claims JWTClaims
 			var err error
 			if cache != nil {
-				// RS256 via JWKS only. No HS256 fallback when JWKS is configured.
 				claims, err = verifyRS256(tok, func(kid string) *rsa.PublicKey { return cache.get(r.Context(), kid) })
-			} else if secret != "" {
-				// HS256 path remains for now (deprecated).
-				claims, err = verifyHS256(tok, secret)
 			}
 			if err != nil {
 				logger.Debug("auth failed: signature/structure verification", "req_id", reqID, "path", r.URL.Path, "method", r.Method, "err", err.Error())

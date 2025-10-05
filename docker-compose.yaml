@@ -53,8 +53,6 @@ services:
       # Ledger only compares strings, so it's fine that this URL isn't reachable inside the container
       JWT_ISSUER: ${JWT_ISSUER:-http://localhost:8082/realms/internal}
       JWT_AUDIENCE: ${JWT_AUDIENCE:-ledger-api}
-      # Optional HS256 secret; leave empty to disable
-      JWT_HS256_SECRET: ${JWT_HS256_SECRET:-}
     ports:
       - "8080:8080"
     healthcheck:
